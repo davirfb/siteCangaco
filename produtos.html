@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Produtos - Castanhas e Torresmo</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" type="image/png" sizes="16x16" href="img/logocacto.svg">
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="theme-color" content="#ffffff">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-wrapper">
+                <div class="logo logo-img">
+                    <img src="img/logocangaco.svg" alt="Logo cangaço">
+                </div>
+                <button class="menu-toggle" aria-label="Menu">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <ul class="nav-menu">
+                    <li><a href="index.html">Início</a></li>
+                    <li><a href="index.html#sobre">Sobre</a></li>
+                    <li><a href="produtos.html" class="active">Produtos</a></li>
+                    <li><a href="contato.html">Contato</a></li>
+                </ul>
+                <a href="https://wa.me/5561993779722?text=Olá!%20Gostaria%20de%20saber%20mais%20sobre%20seus%20produtos." class="btn-whatsapp" target="_blank">
+                    <i class="fab fa-whatsapp"></i> WhatsApp
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Produtos Header -->
+    <section class="page-header">
+        <div class="container">
+            <h1>Nossos Produtos</h1>
+            <p>Alimentos artesanais de qualidade para você e sua família</p>
+        </div>
+    </section>
+
+    <!-- Produtos Grid -->
+    <section class="produtos-page">
+        <div class="container">
+            <div class="produtos-grid-full">
+                <!-- Produto 1 -->
+                <div class="produto-card-full">
+                    <img src="img/logocacto.svg" alt="Castanha de Caju">
+                    <div class="produto-info">
+                        <h3>Castanha de Caju - 250g</h3>
+                        <p class="produto-desc">Selecionada e torrada artesanalmente, mantendo todo o sabor natural</p>
+                        <p class="produto-preco">R$ 25,90</p>
+                        <button class="btn-secondary" onclick="abrirModal('modal-1')">Ver Fardo</button>
+                    </div>
+                </div>
+
+                <!-- Produto 2 -->
+                <div class="produto-card-full">
+                    <img src="img/logocacto.svg" alt="Castanha de Caju Caramelizada">
+                    <div class="produto-info">
+                        <h3>Castanha de Caju - 140g</h3>
+                        <p class="produto-desc"></p>
+                        <p class="produto-preco">R$ 28,90</p>
+                        <button class="btn-secondary" onclick="abrirModal('modal-2')">Ver Fardo</button>
+                    </div>
+                </div>
+
+                <!-- Produto 3 -->
+                <div class="produto-card-full">
+                    <img src="img/logocacto.svg" alt="Torresmo">
+                    <div class="produto-info">
+                        <h3>Torresmo</h3>
+                        <p class="produto-desc">Crocante e saboroso, feito na hora com receita tradicional</p>
+                        <p class="produto-preco">R$ 18,90</p>
+                        <button class="btn-secondary" onclick="abrirModal('modal-3')">Ver Fardo</button>
+                    </div>
+                </div>
+
+                <!-- Produto 4 -->
+                <div class="produto-card-full">
+                    <img src="img/logocacto.svg" alt="Castanha de Caju Salgada">
+                    <div class="produto-info">
+                        <h3>Castanha de Caju Salgada</h3>
+                        <p class="produto-desc">Torrada com sal marinho, sabor intenso e natural</p>
+                        <p class="produto-preco">R$ 26,90</p>
+                        <button class="btn-secondary" onclick="abrirModal('modal-4')">Ver Fardo</button>
+                    </div>
+                </div>
+
+                <!-- Produto 5 -->
+                <div class="produto-card-full">
+                    <img src="img/logocacto.svg" alt="Castanha de Caju com Mel">
+                    <div class="produto-info">
+                        <h3>Castanha de Caju com Mel</h3>
+                        <p class="produto-desc">Combinação perfeita de castanha e mel artesanal</p>
+                        <p class="produto-preco">R$ 32,90</p>
+                        <button class="btn-secondary" onclick="abrirModal('modal-5')">Ver Fardo</button>
+                    </div>
+                </div>
+
+                <!-- Produto 6 -->
+                <div class="produto-card-full">
+                    <img src="img/logocacto.svg" alt="Torresmo Temperado">
+                    <div class="produto-info">
+                        <h3>Torresmo Temperado</h3>
+                        <p class="produto-desc">Torresmo com temperos especiais, sabor único</p>
+                        <p class="produto-preco">R$ 21,90</p>
+                        <button class="btn-secondary" onclick="abrirModal('modal-6')">Ver Fardo</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Modais -->
+    <!-- Modal 1 -->
+    <div id="modal-1" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="fecharModal('modal-1')">&times;</span>
+            <img src="img/logocacto.svg" alt="Castanha de Caju - Fardo">
+            <h2>Castanha de Caju - Fardo</h2>
+            <p class="modal-desc">Fardo com 12 unidades de 200g cada</p>
+            <p class="modal-preco">R$ 280,00</p>
+            <a href="https://wa.me/5561993779722?text=Olá!%20Gostaria%20de%20comprar%20o%20fardo%20de%20Castanha%20de%20Caju." class="btn-primary" target="_blank">Comprar via WhatsApp</a>
+        </div>
+    </div>
+
+    <!-- Modal 2 -->
+    <div id="modal-2" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="fecharModal('modal-2')">&times;</span>
+            <img src="img/logocacto.svg" alt="Castanha de Caju Caramelizada - Fardo">
+            <h2>Castanha de Caju Caramelizada - Fardo</h2>
+            <p class="modal-desc">Fardo com 12 unidades de 200g cada</p>
+            <p class="modal-preco">R$ 310,00</p>
+            <a href="https://wa.me/5561993779722?text=Olá!%20Gostaria%20de%20comprar%20o%20fardo%20de%20Castanha%20Caramelizada." class="btn-primary" target="_blank">Comprar via WhatsApp</a>
+        </div>
+    </div>
+
+    <!-- Modal 3 -->
+    <div id="modal-3" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="fecharModal('modal-3')">&times;</span>
+            <img src="img/logocacto.svg" alt="Torresmo - Fardo">
+            <h2>Torresmo - Fardo</h2>
+            <p class="modal-desc">Fardo com 10 unidades de 250g cada</p>
+            <p class="modal-preco">R$ 170,00</p>
+            <a href="https://wa.me/5561993779722?text=Olá!%20Gostaria%20de%20comprar%20o%20fardo%20de%20Torresmo." class="btn-primary" target="_blank">Comprar via WhatsApp</a>
+        </div>
+    </div>
+
+    <!-- Modal 4 -->
+    <div id="modal-4" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="fecharModal('modal-4')">&times;</span>
+            <img src="img/logocacto.svg" alt="Castanha de Caju Salgada - Fardo">
+            <h2>Castanha de Caju Salgada - Fardo</h2>
+            <p class="modal-desc">Fardo com 12 unidades de 200g cada</p>
+            <p class="modal-preco">R$ 290,00</p>
+            <a href="https://wa.me/5561993779722?text=Olá!%20Gostaria%20de%20comprar%20o%20fardo%20de%20Castanha%20Salgada." class="btn-primary" target="_blank">Comprar via WhatsApp</a>
+        </div>
+    </div>
+
+    <!-- Modal 5 -->
+    <div id="modal-5" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="fecharModal('modal-5')">&times;</span>
+            <img src="img/logocacto.svg" alt="Castanha de Caju com Mel - Fardo">
+            <h2>Castanha de Caju com Mel - Fardo</h2>
+            <p class="modal-desc">Fardo com 12 unidades de 200g cada</p>
+            <p class="modal-preco">R$ 360,00</p>
+            <a href="https://wa.me/5561993779722?text=Olá!%20Gostaria%20de%20comprar%20o%20fardo%20de%20Castanha%20com%20Mel." class="btn-primary" target="_blank">Comprar via WhatsApp</a>
+        </div>
+    </div>
+
+    <!-- Modal 6 -->
+    <div id="modal-6" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="fecharModal('modal-6')">&times;</span>
+            <img src="img/logocacto.svg" alt="Torresmo Temperado - Fardo">
+            <h2>Torresmo Temperado - Fardo</h2>
+            <p class="modal-desc">Fardo com 10 unidades de 250g cada</p>
+            <p class="modal-preco">R$ 200,00</p>
+            <a href="https://wa.me/5561993779722?text=Olá!%20Gostaria%20de%20comprar%20o%20fardo%20de%20Torresmo%20Temperado." class="btn-primary" target="_blank">Comprar via WhatsApp</a>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-column">
+                    <h3>Produtos</h3>
+                    <ul>
+                        <li><a href="produtos.html">Castanha de Caju</a></li>
+                        <li><a href="produtos.html">Castanha de Caju Caramelizada</a></li>
+                        <li><a href="produtos.html">Torresmo</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h3>Contatos</h3>
+                    <ul>
+                        <li><i class="fas fa-envelope"></i> empresacangaco@gmail.com</li>
+                        <li><i class="fab fa-instagram"></i> cangaco.br</li>
+                        <li><i class="fas fa-phone"></i> (61) 98427-4420</li>
+                        <li><i class="fab fa-whatsapp"></i> (61) 99377-9722</li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h3>Redes Sociais</h3>
+                    <div class="social-links">
+                        <a href="mailto:empresacangaco@gmail.com" aria-label="Email">
+                            <i class="fas fa-envelope"></i>
+                        </a>
+                        <a href="https://wa.me/5561993779722" target="_blank" aria-label="WhatsApp">
+                            <i class="fab fa-whatsapp"></i>
+                        </a>
+                        <a href="https://www.instagram.com/cangaco.br/" target="_blank" aria-label="Instagram">
+                            <i class="fab fa-instagram"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Cangaço. Todos os direitos reservados.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
