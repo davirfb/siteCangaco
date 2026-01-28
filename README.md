@@ -1,6 +1,6 @@
-# Site Institucional - Castanhas & Torresmo
+# Site Institucional - Cangaço
 
-Site institucional moderno e responsivo para empresa de alimentos artesanais (Castanhas e Torresmo).
+Site institucional moderno e responsivo para empresa de alimentos artesanais (Cangaço).
 
 ## 🎨 Características
 
@@ -38,7 +38,7 @@ site/
 - **Vitrine**: 3 produtos em destaque com link para página completa
 
 ### Página de Produtos (produtos.html)
-- Grid responsivo com 7 produtos
+- Grid responsivo 
 - Modal interativo ao clicar em "Ver Fardo"
 - Informações de preço unitário e atacado
 
@@ -55,21 +55,6 @@ site/
 - **Dark Brown**: #8B4513 (Saddle Brown)
 - **Light Orange**: #FF8C42
 - **Cream**: #FFF8DC (Bege claro)
-
-## ⚙️ Personalização
-
-### Alterar Número do WhatsApp
-Substitua `5511999999999` nos links do WhatsApp pelos números reais:
-- Procure por `wa.me/5511999999999` em todos os arquivos HTML
-- Substitua pelo número no formato: `5511999999999` (código do país + DDD + número)
-
-### Alterar Email
-Substitua `contato@castanhastorresmo.com.br` pelos emails reais nos arquivos HTML.
-
-### Alterar Imagens
-As imagens estão usando URLs do Unsplash. Para usar imagens próprias:
-1. Adicione as imagens em uma pasta `images/`
-2. Substitua as URLs do Unsplash pelos caminhos locais
 
 ## 📝 Notas Técnicas
 
@@ -88,6 +73,5 @@ As imagens estão usando URLs do Unsplash. Para usar imagens próprias:
 
 Para dúvidas ou sugestões, entre em contato através do formulário no site.
 
----
 
-Desenvolvido com ❤️ para Castanhas & Torresmo
+
