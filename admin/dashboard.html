@@ -422,14 +422,32 @@
     window.atualizarPreviewUrl = function(url) {
       const preview = document.getElementById('image-preview');
       const wrapper = document.getElementById('url-preview-wrapper');
-      if (url && url.startsWith('http')) {
-        preview.src          = url;
+      const direta  = converterUrlDireta(url);
+      if (direta) {
+        // Atualiza o campo com a URL já convertida
+        document.getElementById('prod-imagem-url').value = direta;
+        preview.src           = direta;
         wrapper.style.display = 'block';
       } else {
         wrapper.style.display = 'none';
         preview.src = '';
       }
     };
+
+    function converterUrlDireta(url) {
+      if (!url || !url.startsWith('http')) return null;
+
+      // Imgur: https://imgur.com/XXXXX → https://i.imgur.com/XXXXX.jpg
+      const imgurPagina = url.match(/^https?:\/\/(?:www\.)?imgur\.com\/([a-zA-Z0-9]+)$/);
+      if (imgurPagina) return `https://i.imgur.com/${imgurPagina[1]}.jpg`;
+
+      // Google Drive: /file/d/ID/view → direto
+      const drive = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+      if (drive) return `https://drive.google.com/uc?export=view&id=${drive[1]}`;
+
+      // Já é URL direta
+      return url;
+    }
 
     // ─── Excluir Produto ─────────────────────────────────────────
     window.confirmarExclusao = (id, nome, imgPath) => {
