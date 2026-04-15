@@ -128,15 +128,17 @@
 
         <!-- Imagem -->
         <div class="form-group">
-          <label for="prod-imagem-url">URL da Imagem</label>
-          <input type="url" id="prod-imagem-url" placeholder="https://exemplo.com/imagem.jpg"
-                 oninput="atualizarPreviewUrl(this.value)">
-          <div id="url-preview-wrapper" style="margin-top:10px;display:none">
-            <img id="image-preview" style="max-height:160px;border-radius:8px;border:1px solid #e5e7eb;object-fit:contain;width:100%" alt="Preview">
+          <label>Imagem do Produto</label>
+          <div class="image-upload-area" id="image-upload-area">
+            <div class="upload-placeholder" id="upload-placeholder">
+              <i class="fas fa-camera"></i>
+              <p>Clique para escolher uma foto</p>
+              <span>JPG, PNG — será comprimida automaticamente</span>
+            </div>
+            <img id="image-preview" class="image-preview" style="display:none" alt="Preview">
+            <input type="file" id="prod-imagem" accept="image/*" style="display:none">
           </div>
-          <small style="color:#9ca3af;font-size:0.78rem;margin-top:6px;display:block">
-            Cole o link de uma imagem do Google Fotos, Google Drive, Imgur, etc.
-          </small>
+          <div id="img-info" style="font-size:0.78rem;color:#9ca3af;margin-top:6px;display:none"></div>
         </div>
 
         <!-- Toggles -->
@@ -262,10 +264,11 @@
     });
 
     // ─── State ─────────────────────────────────────────────────
-    let produtos     = [];
-    let editandoId   = null;
-    let deletandoId  = null;
+    let produtos         = [];
+    let editandoId       = null;
+    let deletandoId      = null;
     let deletandoImgPath = null;
+    let imagemBase64     = null;  // imagem selecionada pelo utilizador
 
     // ─── Carregar Produtos ──────────────────────────────────────
     async function carregarProdutos() {
@@ -330,7 +333,8 @@
     });
 
     function abrirModal(p = null) {
-      editandoId = p?.id ?? null;
+      editandoId   = p?.id ?? null;
+      imagemBase64 = null;
 
       document.getElementById('modal-titulo').textContent    = p ? 'Editar Produto' : 'Novo Produto';
       document.getElementById('produto-id').value            = p?.id        ?? '';
@@ -342,8 +346,20 @@
       document.getElementById('prod-fardo-preco').value      = p?.fardo?.preco     ?? '';
       document.getElementById('prod-fardo-desc').value       = p?.fardo?.descricao ?? '';
       document.getElementById('form-erro').style.display = 'none';
-      document.getElementById('prod-imagem-url').value   = p?.imagem && p.imagem !== '../img/logocacto.svg' ? p.imagem : '';
-      atualizarPreviewUrl(document.getElementById('prod-imagem-url').value);
+      document.getElementById('prod-imagem').value       = '';
+      document.getElementById('img-info').style.display  = 'none';
+
+      const preview     = document.getElementById('image-preview');
+      const placeholder = document.getElementById('upload-placeholder');
+      if (p?.imagem && p.imagem !== '../img/logocacto.svg') {
+        preview.src           = p.imagem;
+        preview.style.display = 'block';
+        placeholder.style.display = 'none';
+      } else {
+        preview.src           = '';
+        preview.style.display = 'none';
+        placeholder.style.display = 'flex';
+      }
 
       document.getElementById('modal-produto').style.display = 'flex';
       document.getElementById('prod-nome').focus();
@@ -352,7 +368,10 @@
     function fecharModal() {
       document.getElementById('modal-produto').style.display = 'none';
       document.getElementById('form-produto').reset();
-      document.getElementById('url-preview-wrapper').style.display = 'none';
+      document.getElementById('image-preview').style.display    = 'none';
+      document.getElementById('upload-placeholder').style.display = 'flex';
+      document.getElementById('img-info').style.display          = 'none';
+      imagemBase64 = null;
     }
 
     // Expose for onclick attributes in table rows
@@ -422,32 +441,14 @@
     window.atualizarPreviewUrl = function(url) {
       const preview = document.getElementById('image-preview');
       const wrapper = document.getElementById('url-preview-wrapper');
-      const direta  = converterUrlDireta(url);
-      if (direta) {
-        // Atualiza o campo com a URL já convertida
-        document.getElementById('prod-imagem-url').value = direta;
-        preview.src           = direta;
+      if (url && url.startsWith('http')) {
+        preview.src           = url;
         wrapper.style.display = 'block';
       } else {
         wrapper.style.display = 'none';
-        preview.src = '';
+        preview.src           = '';
       }
     };
-
-    function converterUrlDireta(url) {
-      if (!url || !url.startsWith('http')) return null;
-
-      // Imgur: https://imgur.com/XXXXX → https://i.imgur.com/XXXXX.jpg
-      const imgurPagina = url.match(/^https?:\/\/(?:www\.)?imgur\.com\/([a-zA-Z0-9]+)$/);
-      if (imgurPagina) return `https://i.imgur.com/${imgurPagina[1]}.jpg`;
-
-      // Google Drive: /file/d/ID/view → direto
-      const drive = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
-      if (drive) return `https://drive.google.com/uc?export=view&id=${drive[1]}`;
-
-      // Já é URL direta
-      return url;
-    }
 
     // ─── Excluir Produto ─────────────────────────────────────────
     window.confirmarExclusao = (id, nome, imgPath) => {
