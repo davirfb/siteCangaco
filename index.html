@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Castanhas e Torresmo - Alimentos Artesanais</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <!-- Navbar -->
+    <nav class="navbar">
+      <div class="container">
+        <div class="nav-wrapper">
+          <div class="logo logo-img">
+            <img src="img/logocangaco.svg" alt="Logo cangaço" />
+          </div>
+          <button class="menu-toggle" aria-label="Menu">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+          <ul class="nav-menu">
+            <li><a href="index.html" class="active">Início</a></li>
+            <li><a href="index.html#sobre">Sobre</a></li>
+            <li><a href="produtos.html">Produtos</a></li>
+            <li><a href="contato.html">Contato</a></li>
+          </ul>
+          <a
+            href="https://wa.me/5561993779722?text=Olá!%20Gostaria%20de%20saber%20mais%20sobre%20seus%20produtos."
+            class="btn-whatsapp"
+            target="_blank"
+          >
+            <i class="fab fa-whatsapp"></i> WhatsApp
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+      <div class="hero-overlay"></div>
+      <div class="container">
+        <div class="hero-content">
+          <img src="img/logocangaco.svg" alt="Logo Castanhas e Torresmo" />
+          <h1 class="hero-title">Bem-vindo à Cangaço!</h1>
+          <p class="hero-subtitle">
+            Alimentos artesanais de qualidade, feitos com a tradição do
+            nordeste!
+          </p>
+          <a href="contato.html" class="btn-primary">Entre em Contato</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sobre Section -->
+    <section id="sobre" class="sobre">
+      <div class="container">
+        <div class="section-header">
+          <h2>Sobre Nós</h2>
+          <p class="section-subtitle">Nossa história e valores</p>
+        </div>
+        <div class="sobre-content">
+          <div class="sobre-image">
+            <img src="img/logocacto.svg" />
+          </div>
+          <div class="sobre-text">
+            <p>
+              A <strong>Cangaço</strong> nasceu da paixão por alimentos
+              artesanais de alta qualidade. Com anos de experiência e dedicação,
+              selecionamos os melhores ingredientes para criar produtos que
+              trazem sabor autêntico e tradição para sua mesa.
+            </p>
+            <p>
+              Nossos valores são baseados em
+              <strong>qualidade e tradição </strong> aos nossos clientes. Cada
+              produto é cuidadosamente preparado, garantindo o melhor sabor.
+              Acreditamos que comida artesanal é uma forma de conectar pessoas e
+              compartilhar momentos especiais.
+            </p>
+            <p>
+              Trabalhamos com processos artesanais que preservam o sabor natural
+              dos alimentos, sem aditivos desnecessários. Nossa missão é
+              oferecer produtos que você pode confiar e saborear com toda a
+              família.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vitrine Section -->
+    <section class="vitrine">
+      <div class="container">
+        <div class="section-header">
+          <h2>Nossos Produtos</h2>
+          <p class="section-subtitle">Conheça nossos destaques</p>
+        </div>
+        <div class="produtos-grid" id="vitrine-grid">
+          <!-- Loading state -->
+          <div id="loading-vitrine" style="text-align:center;padding:40px 20px;color:#8B4513;width:100%">
+            <i class="fas fa-spinner fa-spin" style="font-size:1.8rem;display:block;margin-bottom:10px;"></i>
+            <p>Carregando produtos...</p>
+          </div>
+        </div>
+        <div class="vitrine-cta">
+          <a href="produtos.html" class="btn-primary">Ver Todos os Produtos</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-content">
+          <div class="footer-column">
+            <h3>Produtos</h3>
+            <ul>
+              <li><a href="produtos.html">Castanha de Caju</a></li>
+              <li><a href="produtos.html">Castanha de Caju Caramelizada</a></li>
+              <li><a href="produtos.html">Torresmo</a></li>
+            </ul>
+          </div>
+          <div class="footer-column">
+            <h3>Contatos</h3>
+            <ul>
+              <li><i class="fas fa-envelope"></i> empresacangaco@gmail.com</li>
+              <li><i class="fab fa-instagram"></i> cangaco.br</li>
+              <li><i class="fas fa-phone"></i> (61) 98427-4420</li>
+              <li><i class="fab fa-whatsapp"></i> (61) 99377-9722</li>
+            </ul>
+          </div>
+          <div class="footer-column">
+            <h3>Redes Sociais</h3>
+            <div class="social-links">
+              <a href="mailto:empresacangaco@gmail.com" aria-label="Email">
+                <i class="fas fa-envelope"></i>
+              </a>
+              <a
+                href="https://wa.me/5561993779722"
+                target="_blank"
+                aria-label="WhatsApp"
+              >
+                <i class="fab fa-whatsapp"></i>
+              </a>
+              <a
+                href="https://www.instagram.com/cangaco.br/"
+                target="_blank"
+                aria-label="Instagram"
+              >
+                <i class="fab fa-instagram"></i>
+              </a>
+            </div>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <p>&copy; 2026 Cangaço. Todos os direitos reservados.</p>
+        </div>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+
+    <script type="module">
+      import { db } from './js/firebase-config.js';
+      import {
+        collection, getDocs, query, where, orderBy, limit
+      } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+      async function carregarDestaques() {
+        const grid = document.getElementById('vitrine-grid');
+
+        try {
+          // Busca produtos com destaque = true, ativos, máximo 3
+          const q    = query(
+            collection(db, 'produtos'),
+            where('destaque', '==', true),
+            where('ativo', '!=', false),
+            limit(3)
+          );
+          const snap = await getDocs(q);
+          let produtos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+          // Fallback: se não houver destaques, mostra os 3 primeiros ativos
+          if (produtos.length === 0) {
+            const q2    = query(collection(db, 'produtos'), limit(3));
+            const snap2 = await getDocs(q2);
+            produtos = snap2.docs
+              .map(d => ({ id: d.id, ...d.data() }))
+              .filter(p => p.ativo !== false)
+              .slice(0, 3);
+          }
+
+          if (produtos.length === 0) {
+            grid.innerHTML = '';
+            return;
+          }
+
+          grid.innerHTML = produtos.map(p => {
+            const preco = Number(p.preco).toFixed(2).replace('.', ',');
+            const img   = p.imagem || 'img/logocacto.svg';
+            return `
+              <div class="produto-card">
+                <img src="${img}" alt="${escHtml(p.nome)}" onerror="this.src='img/logocacto.svg'">
+                <div class="produto-info">
+                  <h3>${escHtml(p.nome)}</h3>
+                  <p class="produto-desc">${escHtml(p.descricao || '')}</p>
+                  <p class="produto-preco">R$ ${preco}</p>
+                  <a href="produtos.html" class="btn-secondary">Ver Detalhes</a>
+                </div>
+              </div>`;
+          }).join('');
+
+          // Animação de entrada
+          const animObs = new IntersectionObserver((entries) => {
+            entries.forEach(en => {
+              if (en.isIntersecting) {
+                en.target.style.opacity   = '1';
+                en.target.style.transform = 'translateY(0)';
+              }
+            });
+          }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+          document.querySelectorAll('#vitrine-grid .produto-card').forEach(el => {
+            el.style.opacity    = '0';
+            el.style.transform  = 'translateY(30px)';
+            el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+            animObs.observe(el);
+          });
+
+        } catch (err) {
+          console.error('Erro ao carregar destaques:', err);
+          grid.innerHTML = ''; // Oculta silenciosamente em caso de erro
+        }
+      }
+
+      function escHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      carregarDestaques();
+    </script>
+  </body>
+</html>
