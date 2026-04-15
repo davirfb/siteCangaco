@@ -474,15 +474,20 @@
 
         if (editandoId) {
           await updateDoc(doc(db, 'produtos', editandoId), dados);
+          // Atualiza localmente sem rebuscar do Firestore
+          const idx = produtos.findIndex(p => p.id === editandoId);
+          if (idx !== -1) produtos[idx] = { ...produtos[idx], ...dados };
           toast('Produto atualizado com sucesso!');
         } else {
           dados.criadoEm = serverTimestamp();
-          await addDoc(collection(db, 'produtos'), dados);
+          const docRef = await addDoc(collection(db, 'produtos'), dados);
+          // Adiciona localmente sem rebuscar do Firestore
+          produtos.unshift({ id: docRef.id, ...dados, criadoEm: new Date() });
           toast('Produto adicionado com sucesso!');
         }
 
         fecharModal();
-        await carregarProdutos();
+        renderizarTabela();
 
       } catch (err) {
         console.error(err);
@@ -544,8 +549,10 @@
           try { await deleteObject(ref(storage, deletandoImgPath)); } catch { /* ok */ }
         }
         document.getElementById('modal-confirmar').style.display = 'none';
+        // Remove localmente sem rebuscar do Firestore
+        produtos = produtos.filter(p => p.id !== deletandoId);
         toast('Produto excluído.');
-        await carregarProdutos();
+        renderizarTabela();
       } catch (err) {
         console.error(err);
         toast('Erro ao excluir produto.', 'error');
