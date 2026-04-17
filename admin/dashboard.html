@@ -159,18 +159,20 @@
 
           <!-- Imagem -->
           <div class="form-group">
-            <label for="prod-imagem-url">URL da Imagem</label>
-            <input type="url" id="prod-imagem-url"
-                   placeholder="https://drive.google.com/uc?export=view&id=..."
-                   oninput="atualizarPreviewUrl(this.value)">
-            <div id="url-preview-wrapper" style="margin-top:10px;display:none">
-              <img id="image-preview"
-                   style="max-height:160px;border-radius:8px;border:1px solid #e5e7eb;object-fit:contain;width:100%"
-                   alt="Preview">
+            <label>Imagem do Produto</label>
+            <div class="image-upload-area" id="image-upload-area">
+              <div class="upload-placeholder" id="upload-placeholder">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <p>Clique ou arraste uma imagem aqui</p>
+                <span>JPG, PNG, WebP — máx. 10 MB</span>
+              </div>
+              <img id="image-preview" class="image-preview" style="display:none" alt="Preview">
+              <input type="file" id="prod-imagem" accept="image/*" style="display:none">
             </div>
-            <small style="color:#9ca3af;font-size:0.78rem;margin-top:6px;display:block">
-              Cole o link direto do Google Drive: drive.google.com/uc?export=view&amp;id=...
-            </small>
+            <div class="upload-progress" id="upload-progress" style="display:none">
+              <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+              <span id="progress-text">Enviando...</span>
+            </div>
           </div>
 
           <!-- Toggles -->
@@ -344,11 +346,16 @@
         }
       });
 
+      // ─── Cloudinary config ─────────────────────────────────────
+      const CLOUDINARY_CLOUD  = 'dykq5hssj';
+      const CLOUDINARY_PRESET = 'cangaco_produtos';
+
       // ─── State ─────────────────────────────────────────────────
-      let produtos = [];
-      let editandoId = null;
-      let deletandoId = null;
-      let deletandoImgPath = null;
+      let produtos           = [];
+      let editandoId         = null;
+      let deletandoId        = null;
+      let deletandoImgPath   = null;
+      let imagemCloudinaryUrl = null; // URL retornada após upload
 
       // ─── Carregar Produtos ──────────────────────────────────────
       async function carregarProdutos() {
@@ -448,18 +455,31 @@
         document.getElementById("prod-fardo-desc").value     = p?.fardo?.descricao ?? "";
         document.getElementById("form-erro").style.display   = "none";
 
-        const url = (p?.imagem && p.imagem !== "../img/logocacto.svg") ? p.imagem : "";
-        document.getElementById("prod-imagem-url").value = url;
-        atualizarPreviewUrl(url);
+        // Preview da imagem existente
+        const preview     = document.getElementById("image-preview");
+        const placeholder = document.getElementById("upload-placeholder");
+        document.getElementById("prod-imagem").value = "";
+        if (p?.imagem && p.imagem !== "../img/logocacto.svg") {
+          preview.src = p.imagem;
+          preview.style.display = "block";
+          placeholder.style.display = "none";
+        } else {
+          preview.src = "";
+          preview.style.display = "none";
+          placeholder.style.display = "flex";
+        }
 
         document.getElementById("modal-produto").style.display = "flex";
         document.getElementById("prod-nome").focus();
       }
 
       function fecharModal() {
-        document.getElementById("modal-produto").style.display    = "none";
+        document.getElementById("modal-produto").style.display = "none";
         document.getElementById("form-produto").reset();
-        document.getElementById("url-preview-wrapper").style.display = "none";
+        document.getElementById("image-preview").style.display    = "none";
+        document.getElementById("upload-placeholder").style.display = "flex";
+        document.getElementById("upload-progress").style.display   = "none";
+        imagemCloudinaryUrl = null;
       }
 
       // Expose for onclick attributes in table rows
@@ -481,10 +501,17 @@
           document.getElementById("form-erro").style.display = "none";
 
           try {
-            // Usa a URL digitada, ou a imagem padrão
-            const imagemUrl =
-              document.getElementById("prod-imagem-url").value.trim() ||
-              "../img/logocacto.svg";
+            // Faz upload para Cloudinary se houver imagem nova selecionada
+            let imagemUrl = imagemCloudinaryUrl;
+            if (!imagemUrl && editandoId) {
+              imagemUrl = produtos.find(p => p.id === editandoId)?.imagem || null;
+            }
+            if (!imagemUrl) imagemUrl = '../img/logocacto.svg';
+
+            const fileInput = document.getElementById('prod-imagem');
+            if (fileInput.files[0]) {
+              imagemUrl = await uploadCloudinary(fileInput.files[0]);
+            }
 
             const fardoPreco =
               document.getElementById("prod-fardo-preco").value;
@@ -538,17 +565,70 @@
           }
         });
 
-      window.atualizarPreviewUrl = function (url) {
-        const preview = document.getElementById("image-preview");
-        const wrapper = document.getElementById("url-preview-wrapper");
-        if (url && url.startsWith("http")) {
-          preview.src = url;
-          wrapper.style.display = "block";
-        } else {
-          wrapper.style.display = "none";
-          preview.src = "";
-        }
-      };
+      // ─── Cloudinary Upload ───────────────────────────────────────
+      const imageArea = document.getElementById('image-upload-area');
+      const fileInput = document.getElementById('prod-imagem');
+
+      imageArea.addEventListener('click', () => fileInput.click());
+      imageArea.addEventListener('dragover', (e) => { e.preventDefault(); imageArea.classList.add('drag-over'); });
+      imageArea.addEventListener('dragleave', () => imageArea.classList.remove('drag-over'));
+      imageArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        imageArea.classList.remove('drag-over');
+        if (e.dataTransfer.files[0]) mostrarPreviewLocal(e.dataTransfer.files[0]);
+      });
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files[0]) mostrarPreviewLocal(e.target.files[0]);
+      });
+
+      function mostrarPreviewLocal(file) {
+        imagemCloudinaryUrl = null;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const preview = document.getElementById('image-preview');
+          preview.src = e.target.result;
+          preview.style.display = 'block';
+          document.getElementById('upload-placeholder').style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+      }
+
+      async function uploadCloudinary(file) {
+        const progressDiv  = document.getElementById('upload-progress');
+        const progressFill = document.getElementById('progress-fill');
+        progressDiv.style.display = 'flex';
+        progressFill.style.width  = '0%';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', CLOUDINARY_PRESET);
+
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`);
+
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const pct = Math.round(e.loaded / e.total * 100);
+              progressFill.style.width = pct + '%';
+              document.getElementById('progress-text').textContent = pct + '%';
+            }
+          };
+
+          xhr.onload = () => {
+            progressDiv.style.display = 'none';
+            if (xhr.status === 200) {
+              const res = JSON.parse(xhr.responseText);
+              resolve(res.secure_url);
+            } else {
+              reject(new Error('Erro no upload: ' + xhr.responseText));
+            }
+          };
+
+          xhr.onerror = () => reject(new Error('Falha na conexão com Cloudinary.'));
+          xhr.send(formData);
+        });
+      }
 
       // ─── Excluir Produto ─────────────────────────────────────────
       window.confirmarExclusao = (id, nome, imgPath) => {
