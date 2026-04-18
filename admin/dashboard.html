@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard — Cangaço Admin</title>
+    <link rel="stylesheet" href="admin.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+  </head>
+  <body class="dashboard-page">
+    <!-- ===== HEADER ===== -->
+    <header class="admin-header">
+      <div class="header-left">
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Menu">
+          <i class="fas fa-bars"></i>
+        </button>
+        <img src="../img/logocangaco.svg" alt="Cangaço" class="header-logo" />
+        <span class="header-title">Painel Administrativo</span>
+      </div>
+      <div class="header-right">
+        <span class="user-email" id="user-email"></span>
+        <button class="btn-logout" id="btn-logout">
+          <i class="fas fa-sign-out-alt"></i> Sair
+        </button>
+      </div>
+    </header>
+
+    <div class="dashboard-layout">
+      <!-- ===== SIDEBAR ===== -->
+      <aside class="sidebar" id="sidebar">
+        <nav class="sidebar-nav">
+          <a href="#" class="nav-item active" data-section="produtos">
+            <i class="fas fa-box"></i>
+            <span>Produtos</span>
+          </a>
+          <a
+            href="../index.html"
+            class="nav-item"
+            target="_blank"
+            rel="noopener"
+          >
+            <i class="fas fa-external-link-alt"></i>
+            <span>Ver Site</span>
+          </a>
+        </nav>
+      </aside>
+
+      <!-- ===== MAIN CONTENT ===== -->
+      <main class="dashboard-main">
+        <!-- PRODUTOS SECTION -->
+        <section id="section-produtos" class="dashboard-section active">
+          <div class="section-toolbar">
+            <h2>Produtos</h2>
+            <button class="btn-primary" id="btn-novo-produto">
+              <i class="fas fa-plus"></i> Novo Produto
+            </button>
+          </div>
+
+          <!-- Loading -->
+          <div class="loading-state" id="produtos-loading">
+            <i class="fas fa-spinner"></i>
+            <p>Carregando produtos...</p>
+          </div>
+
+          <!-- Empty state -->
+          <div class="empty-state" id="produtos-empty" style="display: none">
+            <i class="fas fa-box-open"></i>
+            <p>Nenhum produto cadastrado.</p>
+            <button
+              class="btn-primary"
+              style="margin-top: 4px"
+              onclick="document.getElementById('btn-novo-produto').click()"
+            >
+              Adicionar primeiro produto
+            </button>
+          </div>
+
+          <!-- Table -->
+          <div
+            class="table-wrapper"
+            id="produtos-table-wrapper"
+            style="display: none"
+          >
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Imagem</th>
+                  <th>Nome</th>
+                  <th>Preço</th>
+                  <th>Destaque</th>
+                  <th>Status</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="produtos-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ===================================================
+       MODAL — PRODUTO (ADD / EDIT)
+       =================================================== -->
+    <div
+      class="modal-overlay"
+      id="modal-produto"
+      style="display: none"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3 id="modal-titulo">Novo Produto</h3>
+          <button class="modal-close-btn" id="modal-close" aria-label="Fechar">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <form id="form-produto" class="modal-form" novalidate>
+          <input type="hidden" id="produto-id" />
+
+          <!-- Nome + Preço -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="prod-nome">Nome do Produto *</label>
+              <input
+                type="text"
+                id="prod-nome"
+                required
+                placeholder="Ex: Castanha de Caju — 250g"
+              />
+            </div>
+            <div class="form-group">
+              <label for="prod-preco">Preço unitário (R$) *</label>
+              <input
+                type="number"
+                id="prod-preco"
+                required
+                step="0.01"
+                min="0"
+                placeholder="25.90"
+              />
+            </div>
+          </div>
+
+          <!-- Descrição -->
+          <div class="form-group">
+            <label for="prod-descricao">Descrição</label>
+            <textarea
+              id="prod-descricao"
+              rows="3"
+              placeholder="Descrição do produto..."
+            ></textarea>
+          </div>
+
+          <!-- Imagem -->
+          <div class="form-group">
+            <label>Imagem do Produto</label>
+            <div class="image-upload-area" id="image-upload-area">
+              <div class="upload-placeholder" id="upload-placeholder">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <p>Clique ou arraste uma imagem aqui</p>
+                <span>JPG, PNG, WebP — máx. 10 MB</span>
+              </div>
+              <img id="image-preview" class="image-preview" style="display:none" alt="Preview">
+              <input type="file" id="prod-imagem" accept="image/*" style="display:none">
+            </div>
+            <div class="upload-progress" id="upload-progress" style="display:none">
+              <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+              <span id="progress-text">Enviando...</span>
+            </div>
+          </div>
+
+          <!-- Toggles -->
+          <div class="form-row">
+            <div class="form-group toggle-group">
+              <label class="toggle-label">
+                <input type="checkbox" id="prod-destaque" />
+                <span class="toggle-switch"></span>
+                Destaque na página inicial
+              </label>
+            </div>
+            <div class="form-group toggle-group">
+              <label class="toggle-label">
+                <input type="checkbox" id="prod-ativo" checked />
+                <span class="toggle-switch"></span>
+                Produto ativo
+              </label>
+            </div>
+          </div>
+
+          <!-- Fardo -->
+          <div class="form-divider">
+            <span>Informações do Fardo (opcional)</span>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="prod-fardo-preco">Preço do Fardo (R$)</label>
+              <input
+                type="number"
+                id="prod-fardo-preco"
+                step="0.01"
+                min="0"
+                placeholder="280.00"
+              />
+            </div>
+            <div class="form-group">
+              <label for="prod-fardo-desc">Descrição do Fardo</label>
+              <input
+                type="text"
+                id="prod-fardo-desc"
+                placeholder="Ex: Fardo com 12 unidades de 200g"
+              />
+            </div>
+          </div>
+
+          <!-- Error -->
+          <div
+            id="form-erro"
+            class="erro-msg"
+            style="display: none"
+            role="alert"
+          ></div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" id="btn-cancelar">
+              Cancelar
+            </button>
+            <button type="submit" class="btn-primary" id="btn-salvar">
+              <i class="fas fa-save"></i>
+              <span id="btn-salvar-text">Salvar Produto</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ===================================================
+       MODAL — CONFIRMAR EXCLUSÃO
+       =================================================== -->
+    <div
+      class="modal-overlay"
+      id="modal-confirmar"
+      style="display: none"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-box modal-small">
+        <div class="modal-header">
+          <h3>Confirmar Exclusão</h3>
+          <button
+            class="modal-close-btn"
+            id="confirmar-close"
+            aria-label="Fechar"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <i class="fas fa-exclamation-triangle warning-icon"></i>
+          <p>
+            Tem certeza que deseja excluir
+            <strong id="confirmar-nome"></strong>?
+          </p>
+          <p class="texto-aviso">Esta ação não pode ser desfeita.</p>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="confirmar-cancelar">
+            Cancelar
+          </button>
+          <button type="button" class="btn-danger" id="confirmar-excluir">
+            <i class="fas fa-trash"></i> Excluir
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast" role="status" aria-live="polite">
+      <i class="fas fa-check-circle"></i>
+      <span id="toast-msg"></span>
+    </div>
+
+    <!-- ===================================================
+       JAVASCRIPT
+       =================================================== -->
+    <script type="module">
+      import { auth, db } from "../js/firebase-config.js";
+      import {
+        onAuthStateChanged,
+        signOut,
+      } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+      import {
+        collection,
+        getDocs,
+        addDoc,
+        updateDoc,
+        deleteDoc,
+        doc,
+        query,
+        orderBy,
+        serverTimestamp,
+      } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+      // ─── Auth Guard ────────────────────────────────────────────
+      onAuthStateChanged(auth, (user) => {
+        if (!user) {
+          window.location.href = "index.html";
+          return;
+        }
+        document.getElementById("user-email").textContent = user.email;
+        carregarProdutos();
+      });
+
+      document
+        .getElementById("btn-logout")
+        .addEventListener("click", async () => {
+          await signOut(auth);
+          window.location.href = "index.html";
+        });
+
+      // ─── Sidebar Toggle ────────────────────────────────────────
+      const sidebar = document.getElementById("sidebar");
+      document
+        .getElementById("sidebar-toggle")
+        .addEventListener("click", () => {
+          sidebar.classList.toggle("collapsed");
+        });
+
+      // Close sidebar on mobile overlay click
+      document.addEventListener("click", (e) => {
+        if (
+          window.innerWidth <= 768 &&
+          !sidebar.contains(e.target) &&
+          !document.getElementById("sidebar-toggle").contains(e.target) &&
+          !sidebar.classList.contains("collapsed")
+        ) {
+          sidebar.classList.add("collapsed");
+        }
+      });
+
+      // ─── Cloudinary config ─────────────────────────────────────
+      const CLOUDINARY_CLOUD  = 'dykq5hssj';
+      const CLOUDINARY_PRESET = 'cangaco_produtos';
+
+      // ─── State ─────────────────────────────────────────────────
+      let produtos           = [];
+      let editandoId         = null;
+      let deletandoId        = null;
+      let deletandoImgPath   = null;
+      let imagemCloudinaryUrl = null; // URL retornada após upload
+
+      // ─── Carregar Produtos ──────────────────────────────────────
+      async function carregarProdutos() {
+        mostrarEstado("loading");
+        try {
+          const q = query(
+            collection(db, "produtos"),
+            orderBy("criadoEm", "desc"),
+          );
+          const snap = await getDocs(q);
+          produtos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        } catch {
+          // Fallback without orderBy (primeira vez, sem índice ainda)
+          try {
+            const snap = await getDocs(collection(db, "produtos"));
+            produtos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          } catch (err) {
+            toast("Erro ao carregar produtos.", "error");
+            mostrarEstado("empty");
+            return;
+          }
+        }
+        renderizarTabela();
+      }
+
+      function mostrarEstado(estado) {
+        document.getElementById("produtos-loading").style.display =
+          estado === "loading" ? "flex" : "none";
+        document.getElementById("produtos-empty").style.display =
+          estado === "empty" ? "flex" : "none";
+        document.getElementById("produtos-table-wrapper").style.display =
+          estado === "table" ? "block" : "none";
+      }
+
+      function renderizarTabela() {
+        if (produtos.length === 0) {
+          mostrarEstado("empty");
+          return;
+        }
+        mostrarEstado("table");
+
+        document.getElementById("produtos-tbody").innerHTML = produtos
+          .map((p) => {
+            const preco = Number(p.preco).toFixed(2).replace(".", ",");
+            const img = p.imagem || "../img/logocacto.svg";
+            const nome = escHtml(p.nome);
+            const desc = p.descricao
+              ? escHtml(p.descricao.substring(0, 60)) +
+                (p.descricao.length > 60 ? "…" : "")
+              : "";
+            return `
+          <tr>
+            <td><img src="${img}" alt="${nome}" class="table-img" onerror="this.src='../img/logocacto.svg'"></td>
+            <td>
+              <strong>${nome}</strong>
+              ${desc ? `<br><small>${desc}</small>` : ""}
+            </td>
+            <td class="preco-col">R$ ${preco}</td>
+            <td>${p.destaque ? '<span class="badge badge-gold"><i class="fas fa-star" style="font-size:.65rem;margin-right:3px"></i>Destaque</span>' : '<span class="badge badge-gray">—</span>'}</td>
+            <td>${p.ativo !== false ? '<span class="badge badge-green">Ativo</span>' : '<span class="badge badge-red">Inativo</span>'}</td>
+            <td class="acoes-col">
+              <button class="btn-icon btn-edit"   onclick="editarProduto('${p.id}')"                          title="Editar"><i class="fas fa-edit"></i></button>
+              <button class="btn-icon btn-delete" onclick="confirmarExclusao('${p.id}','${escaparAttr(p.nome)}','${p.imagemPath || ""}')" title="Excluir"><i class="fas fa-trash"></i></button>
+            </td>
+          </tr>`;
+          })
+          .join("");
+      }
+
+      // ─── Abrir / Fechar Modal Produto ───────────────────────────
+      document
+        .getElementById("btn-novo-produto")
+        .addEventListener("click", () => abrirModal());
+      document
+        .getElementById("modal-close")
+        .addEventListener("click", fecharModal);
+      document
+        .getElementById("btn-cancelar")
+        .addEventListener("click", fecharModal);
+      document
+        .getElementById("modal-produto")
+        .addEventListener("click", (e) => {
+          if (e.target === e.currentTarget) fecharModal();
+        });
+
+      function abrirModal(p = null) {
+        editandoId = p?.id ?? null;
+
+        document.getElementById("modal-titulo").textContent  = p ? "Editar Produto" : "Novo Produto";
+        document.getElementById("produto-id").value          = p?.id ?? "";
+        document.getElementById("prod-nome").value           = p?.nome ?? "";
+        document.getElementById("prod-preco").value          = p?.preco ?? "";
+        document.getElementById("prod-descricao").value      = p?.descricao ?? "";
+        document.getElementById("prod-destaque").checked     = p?.destaque ?? false;
+        document.getElementById("prod-ativo").checked        = p?.ativo !== false;
+        document.getElementById("prod-fardo-preco").value    = p?.fardo?.preco ?? "";
+        document.getElementById("prod-fardo-desc").value     = p?.fardo?.descricao ?? "";
+        document.getElementById("form-erro").style.display   = "none";
+
+        // Preview da imagem existente
+        const preview     = document.getElementById("image-preview");
+        const placeholder = document.getElementById("upload-placeholder");
+        document.getElementById("prod-imagem").value = "";
+        if (p?.imagem && p.imagem !== "../img/logocacto.svg") {
+          preview.src = p.imagem;
+          preview.style.display = "block";
+          placeholder.style.display = "none";
+        } else {
+          preview.src = "";
+          preview.style.display = "none";
+          placeholder.style.display = "flex";
+        }
+
+        document.getElementById("modal-produto").style.display = "flex";
+        document.getElementById("prod-nome").focus();
+      }
+
+      function fecharModal() {
+        document.getElementById("modal-produto").style.display = "none";
+        document.getElementById("form-produto").reset();
+        document.getElementById("image-preview").style.display    = "none";
+        document.getElementById("upload-placeholder").style.display = "flex";
+        document.getElementById("upload-progress").style.display   = "none";
+        imagemCloudinaryUrl = null;
+      }
+
+      // Expose for onclick attributes in table rows
+      window.editarProduto = (id) => {
+        const p = produtos.find((x) => x.id === id);
+        if (p) abrirModal(p);
+      };
+
+      // ─── Salvar Produto ──────────────────────────────────────────
+      document
+        .getElementById("form-produto")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+
+          const btnSalvar = document.getElementById("btn-salvar");
+          const btnText = document.getElementById("btn-salvar-text");
+          btnSalvar.disabled = true;
+          btnText.textContent = "Salvando…";
+          document.getElementById("form-erro").style.display = "none";
+
+          try {
+            // Faz upload para Cloudinary se houver imagem nova selecionada
+            let imagemUrl = imagemCloudinaryUrl;
+            if (!imagemUrl && editandoId) {
+              imagemUrl = produtos.find(p => p.id === editandoId)?.imagem || null;
+            }
+            if (!imagemUrl) imagemUrl = '../img/logocacto.svg';
+
+            const fileInput = document.getElementById('prod-imagem');
+            if (fileInput.files[0]) {
+              imagemUrl = await uploadCloudinary(fileInput.files[0]);
+            }
+
+            const fardoPreco =
+              document.getElementById("prod-fardo-preco").value;
+            const fardoDesc = document
+              .getElementById("prod-fardo-desc")
+              .value.trim();
+
+            const dados = {
+              nome: document.getElementById("prod-nome").value.trim(),
+              descricao: document.getElementById("prod-descricao").value.trim(),
+              preco: parseFloat(document.getElementById("prod-preco").value),
+              imagem: imagemUrl,
+              destaque: document.getElementById("prod-destaque").checked,
+              ativo: document.getElementById("prod-ativo").checked,
+              fardo:
+                fardoPreco || fardoDesc
+                  ? {
+                      preco: fardoPreco ? parseFloat(fardoPreco) : null,
+                      descricao: fardoDesc || null,
+                    }
+                  : null,
+              atualizadoEm: serverTimestamp(),
+            };
+
+            if (editandoId) {
+              await updateDoc(doc(db, "produtos", editandoId), dados);
+              // Atualiza localmente sem rebuscar do Firestore
+              const idx = produtos.findIndex((p) => p.id === editandoId);
+              if (idx !== -1) produtos[idx] = { ...produtos[idx], ...dados };
+              toast("Produto atualizado com sucesso!");
+            } else {
+              dados.criadoEm = serverTimestamp();
+              const docRef = await addDoc(collection(db, "produtos"), dados);
+              // Adiciona localmente sem rebuscar do Firestore
+              produtos.unshift({
+                id: docRef.id,
+                ...dados,
+                criadoEm: new Date(),
+              });
+              toast("Produto adicionado com sucesso!");
+            }
+
+            fecharModal();
+            renderizarTabela();
+          } catch (err) {
+            console.error(err);
+            mostrarErroForm("Erro ao salvar: " + err.message);
+          } finally {
+            btnSalvar.disabled = false;
+            btnText.textContent = "Salvar Produto";
+          }
+        });
+
+      // ─── Cloudinary Upload ───────────────────────────────────────
+      const imageArea = document.getElementById('image-upload-area');
+      const fileInput = document.getElementById('prod-imagem');
+
+      imageArea.addEventListener('click', () => fileInput.click());
+      imageArea.addEventListener('dragover', (e) => { e.preventDefault(); imageArea.classList.add('drag-over'); });
+      imageArea.addEventListener('dragleave', () => imageArea.classList.remove('drag-over'));
+      imageArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        imageArea.classList.remove('drag-over');
+        if (e.dataTransfer.files[0]) mostrarPreviewLocal(e.dataTransfer.files[0]);
+      });
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files[0]) mostrarPreviewLocal(e.target.files[0]);
+      });
+
+      function mostrarPreviewLocal(file) {
+        imagemCloudinaryUrl = null;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const preview = document.getElementById('image-preview');
+          preview.src = e.target.result;
+          preview.style.display = 'block';
+          document.getElementById('upload-placeholder').style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+      }
+
+      async function uploadCloudinary(file) {
+        const progressDiv  = document.getElementById('upload-progress');
+        const progressFill = document.getElementById('progress-fill');
+        progressDiv.style.display = 'flex';
+        progressFill.style.width  = '0%';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', CLOUDINARY_PRESET);
+
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`);
+
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const pct = Math.round(e.loaded / e.total * 100);
+              progressFill.style.width = pct + '%';
+              document.getElementById('progress-text').textContent = pct + '%';
+            }
+          };
+
+          xhr.onload = () => {
+            progressDiv.style.display = 'none';
+            if (xhr.status === 200) {
+              const res = JSON.parse(xhr.responseText);
+              resolve(res.secure_url);
+            } else {
+              reject(new Error('Erro no upload: ' + xhr.responseText));
+            }
+          };
+
+          xhr.onerror = () => reject(new Error('Falha na conexão com Cloudinary.'));
+          xhr.send(formData);
+        });
+      }
+
+      // ─── Excluir Produto ─────────────────────────────────────────
+      window.confirmarExclusao = (id, nome, imgPath) => {
+        deletandoId = id;
+        deletandoImgPath = imgPath || null;
+        document.getElementById("confirmar-nome").textContent = nome;
+        document.getElementById("modal-confirmar").style.display = "flex";
+      };
+
+      document
+        .getElementById("confirmar-close")
+        .addEventListener("click", () => {
+          document.getElementById("modal-confirmar").style.display = "none";
+        });
+      document
+        .getElementById("confirmar-cancelar")
+        .addEventListener("click", () => {
+          document.getElementById("modal-confirmar").style.display = "none";
+        });
+      document
+        .getElementById("modal-confirmar")
+        .addEventListener("click", (e) => {
+          if (e.target === e.currentTarget)
+            document.getElementById("modal-confirmar").style.display = "none";
+        });
+
+      document
+        .getElementById("confirmar-excluir")
+        .addEventListener("click", async () => {
+          const btn = document.getElementById("confirmar-excluir");
+          btn.disabled = true;
+          try {
+            await deleteDoc(doc(db, "produtos", deletandoId));
+            if (deletandoImgPath) {
+              try {
+                await deleteObject(ref(storage, deletandoImgPath));
+              } catch {
+                /* ok */
+              }
+            }
+            document.getElementById("modal-confirmar").style.display = "none";
+            // Remove localmente sem rebuscar do Firestore
+            produtos = produtos.filter((p) => p.id !== deletandoId);
+            toast("Produto excluído.");
+            renderizarTabela();
+          } catch (err) {
+            console.error(err);
+            toast("Erro ao excluir produto.", "error");
+          } finally {
+            btn.disabled = false;
+          }
+        });
+
+      // ─── ESC fecha qualquer modal ────────────────────────────────
+      document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        document.getElementById("modal-produto").style.display = "none";
+        document.getElementById("modal-confirmar").style.display = "none";
+      });
+
+      // ─── Helpers ─────────────────────────────────────────────────
+      function mostrarErroForm(msg) {
+        const div = document.getElementById("form-erro");
+        div.textContent = msg;
+        div.style.display = "block";
+      }
+
+      function toast(msg, tipo = "success") {
+        const el = document.getElementById("toast");
+        document.getElementById("toast-msg").textContent = msg;
+        el.className = `toast show ${tipo}`;
+        clearTimeout(el._t);
+        el._t = setTimeout(() => el.classList.remove("show"), 3500);
+      }
+
+      function escHtml(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function escaparAttr(str) {
+        return String(str).replace(/'/g, "\\'").replace(/"/g, '\\"');
+      }
+    </script>
+  </body>
+</html>
