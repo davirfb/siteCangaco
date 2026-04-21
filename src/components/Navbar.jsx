@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
+import { useCart } from '../context/CartContext.jsx'
 
 const WA_URL = 'https://wa.me/5561993779722?text=Ol%C3%A1!%20Gostaria%20de%20saber%20mais%20sobre%20seus%20produtos.'
 
@@ -7,6 +8,7 @@ export default function Navbar() {
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
+  const { count, setAberto } = useCart()
 
   function closeMenu() { setOpen(false) }
 
@@ -70,15 +72,29 @@ export default function Navbar() {
             <li><NavLink to="/contato"   className={linkClass} onClick={closeMenu}>Contato</NavLink></li>
           </ul>
 
-          {/* WhatsApp button */}
-          <a
-            href={WA_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hidden md:flex items-center gap-2 bg-whatsapp text-white px-6 py-2.5 rounded-full font-semibold text-sm shadow hover:bg-whatsapp-dark hover:-translate-y-0.5 transition-all"
-          >
-            <i className="fab fa-whatsapp"></i> WhatsApp
-          </a>
+          {/* Carrinho + WhatsApp */}
+          <div className="hidden md:flex items-center gap-3">
+            <button
+              onClick={() => setAberto(true)}
+              className="relative flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition-colors cursor-pointer bg-transparent border-none"
+              aria-label="Carrinho"
+            >
+              <i className="fas fa-shopping-cart text-text-dark text-lg"></i>
+              {count > 0 && (
+                <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                  {count}
+                </span>
+              )}
+            </button>
+            <a
+              href={WA_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 bg-whatsapp text-white px-6 py-2.5 rounded-full font-semibold text-sm shadow hover:bg-whatsapp-dark hover:-translate-y-0.5 transition-all"
+            >
+              <i className="fab fa-whatsapp"></i> WhatsApp
+            </a>
+          </div>
 
         </div>
       </div>

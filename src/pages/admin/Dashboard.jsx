@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { gerarCatalogoPDF } from '../../utils/gerarPDF.js'
 import { auth, db } from '../../lib/firebase.js'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import {
@@ -48,8 +49,9 @@ function ModalProduto({ produto, onClose, onSaved }) {
   const [descricao,   setDescricao]  = useState(produto?.descricao   ?? '')
   const [destaque,    setDestaque]   = useState(produto?.destaque    ?? false)
   const [ativo,       setAtivo]      = useState(produto?.ativo !== false)
-  const [fardoPreco,  setFardoPreco] = useState(produto?.fardo?.preco       ?? '')
-  const [fardoDesc,   setFardoDesc]  = useState(produto?.fardo?.descricao   ?? '')
+  const [atacado, setAtacado] = useState(
+    produto?.atacado?.length ? produto.atacado : []
+  )
   const [previewSrc,  setPreviewSrc] = useState(produto?.imagem || null)
   const [dragOver,    setDragOver]   = useState(false)
   const [uploading,   setUploading]  = useState(false)
@@ -93,10 +95,14 @@ function ModalProduto({ produto, onClose, onSaved }) {
         imagem:    imagemUrl,
         destaque,
         ativo,
-        fardo:     (fardoPreco || fardoDesc)
-          ? { preco: fardoPreco ? parseFloat(fardoPreco) : null, descricao: fardoDesc || null }
-          : null,
+        atacado: atacado
+          .filter(t => t.qtdMinima && t.preco)
+          .map(t => ({ qtdMinima: parseInt(t.qtdMinima), preco: parseFloat(t.preco) }))
+          .sort((a, b) => a.qtdMinima - b.qtdMinima),
         atualizadoEm: serverTimestamp(),
+        ...((!produto?.id || parseFloat(preco) !== Number(produto?.preco)) && {
+          precoAtualizadoEm: serverTimestamp(),
+        }),
       }
 
       if (produto?.id) {
@@ -196,22 +202,51 @@ function ModalProduto({ produto, onClose, onSaved }) {
             </label>
           </div>
 
+          {/* Atacado */}
           <div className="relative flex items-center my-1">
             <div className="flex-1 border-t border-gray-200"></div>
-            <span className="px-3 text-xs text-gray-400 bg-white">Informações do Fardo (opcional)</span>
+            <span className="px-3 text-xs text-gray-400 bg-white">Preços de Atacado (opcional)</span>
             <div className="flex-1 border-t border-gray-200"></div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block mb-1 text-sm font-semibold text-text-dark">Preço do Fardo (R$)</label>
-              <input type="number" value={fardoPreco} onChange={e => setFardoPreco(e.target.value)}
-                     step="0.01" min="0" placeholder="280.00" className={inputClass} />
-            </div>
-            <div>
-              <label className="block mb-1 text-sm font-semibold text-text-dark">Descrição do Fardo</label>
-              <input type="text" value={fardoDesc} onChange={e => setFardoDesc(e.target.value)}
-                     placeholder="Ex: Fardo com 12 unidades de 200g" className={inputClass} />
-            </div>
+
+          <div className="flex flex-col gap-2">
+            {atacado.map((tier, i) => (
+              <div key={i} className="flex gap-2 items-end">
+                <div className="flex-1">
+                  {i === 0 && <label className="block mb-1 text-xs font-semibold text-gray-500">Qtd. mínima</label>}
+                  <input
+                    type="number" min="1" step="1" placeholder="Ex: 150"
+                    value={tier.qtdMinima}
+                    onChange={e => setAtacado(prev => prev.map((t, j) => j === i ? { ...t, qtdMinima: e.target.value } : t))}
+                    className={inputClass}
+                  />
+                </div>
+                <div className="flex-1">
+                  {i === 0 && <label className="block mb-1 text-xs font-semibold text-gray-500">Preço unitário (R$)</label>}
+                  <input
+                    type="number" min="0" step="0.01" placeholder="Ex: 2.90"
+                    value={tier.preco}
+                    onChange={e => setAtacado(prev => prev.map((t, j) => j === i ? { ...t, preco: e.target.value } : t))}
+                    className={inputClass}
+                  />
+                </div>
+                {preco && tier.preco && (
+                  <div className="pb-2.5 text-xs font-semibold text-green-600 whitespace-nowrap">
+                    {Math.round((1 - tier.preco / preco) * 100)}% off
+                  </div>
+                )}
+                <button type="button"
+                        onClick={() => setAtacado(prev => prev.filter((_, j) => j !== i))}
+                        className="pb-2.5 text-red-400 hover:text-red-600 transition-colors cursor-pointer bg-transparent border-none">
+                  <i className="fas fa-trash text-sm"></i>
+                </button>
+              </div>
+            ))}
+            <button type="button"
+                    onClick={() => setAtacado(prev => [...prev, { qtdMinima: '', preco: '' }])}
+                    className="flex items-center gap-2 text-sm text-primary hover:text-dark-brown font-semibold cursor-pointer bg-transparent border-none w-fit">
+              <i className="fas fa-plus"></i> Adicionar faixa de atacado
+            </button>
           </div>
 
           {erro && (
@@ -438,6 +473,7 @@ export default function Dashboard() {
   const [activeSection, setActiveSection] = useState('produtos')
   const [produtos, setProdutos]   = useState([])
   const [slides,   setSlides]     = useState([])
+  const [gerandoPDF, setGerandoPDF] = useState(false)
   const [loading,  setLoading]    = useState(true)
   const [userEmail, setUserEmail] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -588,10 +624,24 @@ export default function Dashboard() {
             <>
               <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
                 <h2 className="text-2xl font-bold text-text-dark">Produtos</h2>
-                <button onClick={() => setModalProduto({})}
-                        className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-lg font-semibold text-sm hover:bg-dark-brown transition-colors cursor-pointer border-none">
-                  <i className="fas fa-plus"></i> Novo Produto
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={async () => {
+                      setGerandoPDF(true)
+                      try { await gerarCatalogoPDF(produtos.filter(p => p.ativo !== false)) }
+                      finally { setGerandoPDF(false) }
+                    }}
+                    disabled={gerandoPDF || produtos.length === 0}
+                    className="flex items-center gap-2 bg-white border-2 border-primary text-primary px-4 py-2.5 rounded-lg font-semibold text-sm hover:bg-primary hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <i className={`fas ${gerandoPDF ? 'fa-spinner fa-spin' : 'fa-file-pdf'}`}></i>
+                    {gerandoPDF ? 'Gerando…' : 'Baixar Catálogo PDF'}
+                  </button>
+                  <button onClick={() => setModalProduto({})}
+                          className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-lg font-semibold text-sm hover:bg-dark-brown transition-colors cursor-pointer border-none">
+                    <i className="fas fa-plus"></i> Novo Produto
+                  </button>
+                </div>
               </div>
 
               {loading && (
