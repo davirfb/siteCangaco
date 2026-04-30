@@ -5,7 +5,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import Navbar    from '../components/Navbar.jsx'
 import Footer    from '../components/Footer.jsx'
 import BackToTop from '../components/BackToTop.jsx'
-import { useCart } from '../context/CartContext.jsx'
+import { useCart } from '../components/context/CartContext.jsx'
 
 const WHATSAPP = '5561993779722'
 
@@ -166,7 +166,7 @@ export default function ProdutoDetalhe() {
                             </span>
                             <button
                               onClick={() => adicionar(
-                                { ...produto, id: `${produto.id}_atacado_${i}`, nome: `${produto.nome} (Atacado)`, preco: tier.preco },
+                                { ...produto, id: `${produto.id}_atacado_${i}`, nome: `${produto.nome} (Atacado)`, preco: tier.preco, qtdMinima: tier.qtdMinima },
                                 tier.qtdMinima
                               )}
                               className="flex items-center gap-1.5 bg-primary text-white px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-dark-brown transition-colors cursor-pointer border-none"

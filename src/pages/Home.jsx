@@ -142,9 +142,8 @@ function SobreSection() {
             </h2>
             <p>
               A <strong className="text-primary">Cangaço</strong> nasceu da
-              paixão por alimentos artesanais de alta qualidade. Com anos de
-              experiência e dedicação, selecionamos os melhores ingredientes
-              para criar produtos que trazem sabor autêntico e tradição para sua
+              paixão de uma família pela comida nordestina. Selecionamos os
+              melhores produtos que trazem sabor autêntico e tradição para sua
               mesa.
             </p>
             <p>
@@ -154,8 +153,7 @@ function SobreSection() {
                 qualidade e tradição{" "}
               </strong>{" "}
               aos nossos clientes. Cada produto é cuidadosamente preparado,
-              garantindo o melhor sabor. Acreditamos que comida artesanal é uma
-              forma de conectar pessoas e compartilhar momentos especiais.
+              garantindo o melhor sabor.
             </p>
             <p>
               Trabalhamos com processos artesanais que preservam o sabor natural

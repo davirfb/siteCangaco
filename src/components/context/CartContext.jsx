@@ -24,8 +24,13 @@ export function CartProvider({ children }) {
   }
 
   function alterarQtd(id, quantidade) {
-    if (quantidade < 1) { remover(id); return }
-    setItens(prev => prev.map(i => i.id === id ? { ...i, quantidade } : i))
+    setItens(prev => {
+      const item = prev.find(i => i.id === id)
+      if (!item) return prev
+      const min = item.qtdMinima ?? 1
+      if (quantidade < min) return prev.filter(i => i.id !== id)
+      return prev.map(i => i.id === id ? { ...i, quantidade } : i)
+    })
   }
 
   function limpar() { setItens([]) }

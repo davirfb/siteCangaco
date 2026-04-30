@@ -36,7 +36,7 @@ function ProdutoCard({ p }) {
         </p>
         <p className="text-primary font-bold text-2xl mb-4">R$ {preco}</p>
         <span className="inline-block border-2 border-primary text-primary px-6 py-2 rounded-full font-semibold text-sm hover:bg-primary hover:text-white transition-all">
-          Ver Produto
+          Comprar
         </span>
       </div>
     </Link>

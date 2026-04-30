@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useCart } from '../context/CartContext.jsx'
+import { useCart } from './context/CartContext.jsx'
 
 const EMPRESA_EMAIL = 'empresacangaco@gmail.com'
 const WHATSAPP      = '5561993779722'
