@@ -20,9 +20,30 @@ function formatCNPJ(v) {
     .replace(/(\d{4})(\d)/, '$1-$2')
 }
 
+function compressImage(file, maxPx = 1920, quality = 0.82) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      let { width, height } = img
+      if (width > maxPx || height > maxPx) {
+        if (width >= height) { height = Math.round(height * maxPx / width); width = maxPx }
+        else                 { width  = Math.round(width  * maxPx / height); height = maxPx }
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width; canvas.height = height
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+      canvas.toBlob(blob => resolve(new File([blob], file.name, { type: 'image/jpeg' })), 'image/jpeg', quality)
+    }
+    img.src = url
+  })
+}
+
 async function uploadToCloudinary(file, onProgress) {
+  const compressed = await compressImage(file)
   const fd = new FormData()
-  fd.append('file', file)
+  fd.append('file', compressed)
   fd.append('upload_preset', PRESET)
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
@@ -192,7 +213,7 @@ function ModalProduto({ produto, onClose, onSaved }) {
                   <div className="flex flex-col items-center justify-center gap-1 py-7 text-gray-400">
                     <i className="fas fa-cloud-upload-alt text-3xl"></i>
                     <p className="text-sm">Clique ou arraste uma imagem aqui</p>
-                    <span className="text-xs">JPG, PNG, WebP — máx. 10 MB</span>
+                    <span className="text-xs">JPG, PNG, WebP — comprimido automaticamente</span>
                   </div>
                 )
               }
@@ -376,7 +397,7 @@ function ModalSlide({ slide, onClose, onSaved }) {
                   <div className="flex flex-col items-center justify-center gap-1 py-10 text-gray-400">
                     <i className="fas fa-image text-4xl"></i>
                     <p className="text-sm">Clique ou arraste uma imagem aqui</p>
-                    <span className="text-xs">JPG, PNG, WebP — máx. 10 MB</span>
+                    <span className="text-xs">JPG, PNG, WebP — comprimido automaticamente</span>
                   </div>
                 )
               }
