@@ -290,3 +290,148 @@ export async function gerarCatalogoPDF(produtos) {
   const nome = `catalogo-cangaco-${new Date().toISOString().slice(0, 10)}.pdf`;
   doc.save(nome);
 }
+
+/* ── PDF de Pedido ── */
+export function gerarPedidoPDF({ cliente, cnpj, itens, total, obs }) {
+  const doc  = new jsPDF({ unit: 'mm', format: 'a4' })
+  const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+
+  // ── Cabeçalho ──
+  doc.setFillColor(...COR_PRIMARY)
+  doc.rect(0, 0, W, 32, 'F')
+
+  doc.setTextColor(255, 255, 255)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(24)
+  doc.text('PEDIDO', MARGIN, 20)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(11)
+  doc.text('Cangaço Alimentos', W - MARGIN, 13, { align: 'right' })
+  doc.text(hoje, W - MARGIN, 24, { align: 'right' })
+
+  // ── Dados do cliente ──
+  let y = 44
+
+  doc.setFillColor(...COR_CREAM)
+  doc.setDrawColor(...COR_BORDER)
+  doc.setLineWidth(0.3)
+  doc.roundedRect(MARGIN, y, W - MARGIN * 2, 30, 3, 3, 'FD')
+
+  doc.setTextColor(...COR_PRIMARY)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.text('CLIENTE', MARGIN + 5, y + 8)
+
+  doc.setTextColor(...COR_DARK)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(18)
+  doc.text(cliente || '—', MARGIN + 5, y + 21)
+
+  if (cnpj) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(12)
+    doc.setTextColor(...COR_LIGHT)
+    doc.text(`CNPJ: ${cnpj}`, W - MARGIN - 5, y + 21, { align: 'right' })
+  }
+
+  y += 42
+
+  // ── Cabeçalho da tabela ──
+  doc.setFillColor(...COR_DARK)
+  doc.rect(MARGIN, y, W - MARGIN * 2, 12, 'F')
+
+  doc.setTextColor(255, 255, 255)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.text('PRODUTO', MARGIN + 4, y + 8)
+  doc.text('QTD', 138, y + 8, { align: 'center' })
+  doc.text('UNIT.', 160, y + 8, { align: 'center' })
+  doc.text('SUBTOTAL', W - MARGIN - 4, y + 8, { align: 'right' })
+
+  y += 12
+
+  // ── Linhas de produto ──
+  itens.forEach((it, i) => {
+    const ROW_H = 16
+    doc.setFillColor(i % 2 === 0 ? 252 : 245, i % 2 === 0 ? 252 : 245, i % 2 === 0 ? 252 : 248)
+    doc.rect(MARGIN, y, W - MARGIN * 2, ROW_H, 'F')
+
+    // Nome (truncado se muito longo)
+    const nomeMax = doc.splitTextToSize(it.nome, 108)
+    doc.setTextColor(...COR_DARK)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(14)
+    doc.text(nomeMax[0], MARGIN + 4, y + 10.5)
+
+    // Quantidade
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(15)
+    doc.setTextColor(...COR_DARK)
+    doc.text(String(it.quantidade), 138, y + 10.5, { align: 'center' })
+
+    // Preço unitário
+    doc.setFontSize(14)
+    doc.setTextColor(...COR_LIGHT)
+    doc.text(`R$ ${Number(it.precoUnitario).toFixed(2).replace('.', ',')}`, 160, y + 10.5, { align: 'center' })
+
+    // Subtotal
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(15)
+    doc.setTextColor(...COR_PRIMARY)
+    doc.text(
+      `R$ ${(it.quantidade * it.precoUnitario).toFixed(2).replace('.', ',')}`,
+      W - MARGIN - 4, y + 10.5, { align: 'right' }
+    )
+
+    y += ROW_H
+  })
+
+  // Linha separadora
+  doc.setDrawColor(...COR_BORDER)
+  doc.setLineWidth(0.5)
+  doc.line(MARGIN, y, W - MARGIN, y)
+  y += 10
+
+  // ── Total ──
+  doc.setFillColor(...COR_PRIMARY)
+  doc.roundedRect(MARGIN, y, W - MARGIN * 2, 22, 3, 3, 'F')
+
+  doc.setTextColor(255, 255, 255)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(12)
+  doc.text('TOTAL DO PEDIDO', MARGIN + 8, y + 9)
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(24)
+  doc.text(`R$ ${total.toFixed(2).replace('.', ',')}`, W - MARGIN - 8, y + 16, { align: 'right' })
+
+  y += 32
+
+  // ── Observações ──
+  if (obs && obs.trim()) {
+    doc.setFillColor(245, 245, 245)
+    doc.setDrawColor(...COR_BORDER)
+    doc.setLineWidth(0.3)
+    const obsLines = doc.splitTextToSize(obs.trim(), W - MARGIN * 2 - 10)
+    const obsH = 14 + obsLines.length * 7
+    doc.roundedRect(MARGIN, y, W - MARGIN * 2, obsH, 3, 3, 'FD')
+
+    doc.setTextColor(...COR_PRIMARY)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.text('OBSERVAÇÕES', MARGIN + 5, y + 8)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(13)
+    doc.setTextColor(...COR_DARK)
+    doc.text(obsLines, MARGIN + 5, y + 17)
+    y += obsH + 10
+  }
+
+  // ── Rodapé ──
+  rodape(doc)
+
+  const nomeArq = `pedido-${(cliente || 'cliente').replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`
+  doc.save(nomeArq)
+}
