@@ -24,14 +24,32 @@ export async function situacoesVendas(forcar = false) {
   const cache = (await situacoesDoc().get()).data()
   if (!forcar && cache?.lista?.length && Date.now() - cache.em < 86400000) return cache.lista
 
-  const { data: modulos = [] } = await blingFetch('/situacoes/modulos')
-  const vendas = modulos.find(m => semAcento(m.nome).includes('vendas') || semAcento(m.descricao).includes('pedidos de venda'))
-  if (!vendas) throw new HttpError(502, 'Não encontrei o módulo de Vendas nas situações do Bling.')
-  const { data = [] } = await blingFetch(`/situacoes/modulos/${vendas.id}`)
-  const lista = data.map(s => ({ id: String(s.id), nome: s.nome, idHerdado: s.idHerdado ? String(s.idHerdado) : null }))
+  let lista
+  try {
+    const { data: modulos = [] } = await blingFetch('/situacoes/modulos')
+    const vendas = modulos.find(m => semAcento(m.nome).includes('vendas') || semAcento(m.descricao).includes('pedidos de venda'))
+    if (!vendas) throw new HttpError(502, 'Não encontrei o módulo de Vendas nas situações do Bling.')
+    const { data = [] } = await blingFetch(`/situacoes/modulos/${vendas.id}`)
+    lista = data.map(s => ({ id: String(s.id), nome: s.nome, idHerdado: s.idHerdado ? String(s.idHerdado) : null }))
+  } catch (err) {
+    // Sem o escopo de Situações: usa as situações padrão do Bling para pedidos de venda
+    if (!err.semPermissao) throw err
+    lista = SITUACOES_PADRAO
+  }
   await situacoesDoc().set({ lista, em: Date.now() })
   return lista
 }
+
+// Situações padrão do módulo Vendas no Bling (situações criadas pelo usuário herdam de uma destas)
+const SITUACOES_PADRAO = [
+  { id: '6',  nome: 'Em aberto' },
+  { id: '9',  nome: 'Atendido' },
+  { id: '12', nome: 'Cancelado' },
+  { id: '15', nome: 'Em andamento' },
+  { id: '18', nome: 'Venda Agenciada' },
+  { id: '21', nome: 'Em digitação' },
+  { id: '24', nome: 'Verificado' },
+].map(s => ({ ...s, idHerdado: null }))
 
 // Classifica a situação do Bling no que a página usa: aberto, concluido, cancelado, outro
 export function classificar(nome) {

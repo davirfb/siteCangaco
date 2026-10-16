@@ -127,6 +127,11 @@ export async function blingFetch(caminho, { method = 'GET', body, query } = {}) 
     const dados = texto ? JSON.parse(texto) : null
     if (!resp.ok) {
       const e = dados?.error
+      if (resp.status === 403) {
+        const err = new HttpError(403, `Bling negou acesso a "${caminho.split('?')[0]}": falta permissão (escopo) no aplicativo Site Cangaço.`)
+        err.semPermissao = true
+        throw err
+      }
       const detalhes = e?.fields?.map(f => f.msg).filter(Boolean).join(' ')
       throw new HttpError(resp.status >= 500 ? 502 : resp.status, `Bling: ${e?.description || e?.message || `HTTP ${resp.status}`}${detalhes ? ` — ${detalhes}` : ''}`)
     }
