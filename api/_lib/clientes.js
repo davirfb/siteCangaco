@@ -5,6 +5,8 @@ import { blingFetch } from './bling.js'
 // Cópia local dos contatos do Bling (para listar e autocompletar rápido).
 // O Bling é o dono dos dados; só o "apelido" existe apenas aqui.
 export const colClientes = () => adminDb.collection('clientes')
+// Grupos (redes de filiais) e destaques existem só no site
+export const colGrupos   = () => adminDb.collection('grupos_clientes')
 const metaDoc = () => adminDb.collection('integracoes').doc('clientesSync')
 
 const esperar = ms => new Promise(r => setTimeout(r, ms))

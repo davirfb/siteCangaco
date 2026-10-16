@@ -435,3 +435,114 @@ export function gerarPedidoPDF({ cliente, cnpj, itens, total, obs }) {
   const nomeArq = `pedido-${(cliente || 'cliente').replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`
   doc.save(nomeArq)
 }
+
+// Lista de clientes (A4 deitado), agrupada por rede/grupo
+// secoes: [{ titulo, destaques: [], clientes: [{ nome, razao, documento, telefone, cidade, destaques: [] }] }]
+export function gerarListaClientesPDF({ secoes, subtitulo }) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
+  const LW = 297
+  const LH = 210
+  const hoje = new Date().toLocaleDateString('pt-BR')
+  const total = secoes.reduce((acc, s) => acc + s.clientes.length, 0)
+  const COLS = [
+    { titulo: 'CLIENTE',   x: MARGIN + 3, w: 92 },
+    { titulo: 'CNPJ / CPF', x: 112, w: 38 },
+    { titulo: 'TELEFONE',  x: 152, w: 34 },
+    { titulo: 'CIDADE',    x: 188, w: 36 },
+    { titulo: 'DESTAQUES', x: 226, w: LW - MARGIN - 226 },
+  ]
+  let pagina = 0
+  let y = 0
+
+  function rodapeLista() {
+    doc.setFillColor(245, 235, 220)
+    doc.rect(0, LH - 10, LW, 10, 'F')
+    doc.setFontSize(7.5)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...COR_LIGHT)
+    doc.text(`Cangaço Alimentos  ·  Lista de clientes  ·  ${hoje}`, MARGIN, LH - 4)
+    doc.text(`Página ${pagina}`, LW - MARGIN, LH - 4, { align: 'right' })
+  }
+
+  function cabecalhoTabela() {
+    doc.setFillColor(...COR_DARK)
+    doc.rect(MARGIN, y, LW - MARGIN * 2, 8, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    COLS.forEach(c => doc.text(c.titulo, c.x, y + 5.5))
+    y += 8
+  }
+
+  function novaPagina() {
+    if (pagina > 0) doc.addPage()
+    pagina++
+    doc.setFillColor(...COR_PRIMARY)
+    doc.rect(0, 0, LW, 18, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(14)
+    doc.text('LISTA DE CLIENTES', MARGIN, 11.5)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.text(`${subtitulo ? subtitulo + '  ·  ' : ''}${total} cliente${total !== 1 ? 's' : ''}  ·  ${hoje}`, LW - MARGIN, 11.5, { align: 'right' })
+    rodapeLista()
+    y = 26
+    cabecalhoTabela()
+  }
+
+  const garantir = h => { if (y + h > LH - 14) novaPagina() }
+
+  novaPagina()
+  secoes.forEach(secao => {
+    if (secao.titulo) {
+      const dest = secao.destaques?.length ? `  —  ${secao.destaques.join(' · ')}` : ''
+      garantir(16)
+      doc.setFillColor(...COR_CREAM)
+      doc.setDrawColor(...COR_BORDER)
+      doc.rect(MARGIN, y, LW - MARGIN * 2, 8, 'FD')
+      doc.setTextColor(...COR_PRIMARY)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9.5)
+      const linha = doc.splitTextToSize(`${secao.titulo} (${secao.clientes.length})${dest}`, LW - MARGIN * 2 - 6)[0]
+      doc.text(linha, MARGIN + 3, y + 5.5)
+      y += 8
+    }
+
+    secao.clientes.forEach((c, i) => {
+      const nomeLinhas = doc.splitTextToSize(c.nome || '—', COLS[0].w).slice(0, 1)
+      const razao      = c.razao ? doc.splitTextToSize(c.razao, COLS[0].w).slice(0, 1) : []
+      const destLinhas = c.destaques?.length ? doc.splitTextToSize(c.destaques.join(' · '), COLS[4].w).slice(0, 2) : []
+      const h = Math.max(8, 4 + (nomeLinhas.length + razao.length) * 4, 4 + destLinhas.length * 4)
+      garantir(h)
+
+      if (i % 2 === 1) { doc.setFillColor(250, 247, 240); doc.rect(MARGIN, y, LW - MARGIN * 2, h, 'F') }
+
+      doc.setTextColor(...COR_DARK)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8.5)
+      doc.text(nomeLinhas, COLS[0].x, y + 5)
+      if (razao.length) {
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7.5)
+        doc.setTextColor(...COR_LIGHT)
+        doc.text(razao, COLS[0].x, y + 9)
+      }
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(...COR_DARK)
+      doc.text(c.documento || '—', COLS[1].x, y + 5)
+      doc.text(doc.splitTextToSize(c.telefone || '—', COLS[2].w)[0], COLS[2].x, y + 5)
+      doc.text(doc.splitTextToSize(c.cidade || '—', COLS[3].w)[0], COLS[3].x, y + 5)
+      if (destLinhas.length) {
+        doc.setTextColor(...COR_PRIMARY)
+        doc.setFont('helvetica', 'bold')
+        doc.text(destLinhas, COLS[4].x, y + 5)
+      }
+      y += h
+    })
+    y += 3
+  })
+
+  doc.save(`clientes-cangaco-${new Date().toISOString().slice(0, 10)}.pdf`)
+}

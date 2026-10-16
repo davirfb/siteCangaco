@@ -18,13 +18,20 @@ export function nomeExibicao(c) {
   return c.apelido?.trim() || c.nome || ''
 }
 
-// Busca por apelido, nome, fantasia, código, CPF/CNPJ ou telefone
-export function filtrarClientes(lista, termo) {
+// Destaques que aparecem sempre com o cliente: os do grupo (rede) + os da filial
+export function destaquesDoCliente(c, grupos = []) {
+  const grupo = c.grupoId ? grupos.find(g => g.id === c.grupoId) : null
+  return [...new Set([...(grupo?.destaques ?? []), ...(c.destaques ?? [])])]
+}
+
+// Busca por apelido, nome, fantasia, código, grupo, destaques, CPF/CNPJ ou telefone
+export function filtrarClientes(lista, termo, grupos = []) {
   const t = semAcento(termo).trim()
   if (!t) return lista
   const dig = soDigitos(termo)
+  const nomeGrupo = id => grupos.find(g => g.id === id)?.nome ?? ''
   return lista.filter(c => {
-    const texto = semAcento(`${c.apelido} ${c.nome} ${c.fantasia} ${c.codigo}`)
+    const texto = semAcento(`${c.apelido} ${c.nome} ${c.fantasia} ${c.codigo} ${nomeGrupo(c.grupoId)} ${(c.destaques ?? []).join(' ')}`)
     if (texto.includes(t)) return true
     if (dig.length >= 3) {
       return [c.numeroDocumento, c.telefone, c.celular].some(v => soDigitos(v).includes(dig))

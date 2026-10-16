@@ -3,13 +3,60 @@ import { api } from '../../lib/api.js'
 import { useRascunho, limparRascunhos } from '../../hooks/useRascunho.js'
 import {
   formatarDocumento, nomeExibicao, filtrarClientes, ordenarClientes,
-  soDigitos, buscarCep, buscarCnpj,
+  soDigitos, buscarCep, buscarCnpj, destaquesDoCliente,
 } from '../../lib/clientes.js'
+import { gerarListaClientesPDF } from '../../utils/gerarPDF.js'
 
 const inputCls = 'w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:border-primary transition-colors'
 const labelCls = 'block mb-1 text-sm font-semibold text-text-dark'
 
 const ativo = c => c.situacao !== 'I' && c.situacao !== 'E'
+
+/* ── Campo de destaques (lista de etiquetas) ── */
+function InputDestaques({ valor, onChange, placeholder }) {
+  const [texto, setTexto] = useState('')
+  function adicionar() {
+    const t = texto.trim()
+    if (t && !valor.includes(t)) onChange([...valor, t])
+    setTexto('')
+  }
+  return (
+    <div>
+      {valor.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {valor.map(d => (
+            <span key={d} className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+              <i className="fas fa-star text-[10px]"></i>{d}
+              <button type="button" onClick={() => onChange(valor.filter(x => x !== d))}
+                      className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-yellow-200 cursor-pointer border-none bg-transparent text-yellow-800">
+                <i className="fas fa-times text-[9px]"></i>
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input value={texto} onChange={e => setTexto(e.target.value)}
+               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionar() } }}
+               placeholder={placeholder} className={inputCls} />
+        <button type="button" onClick={adicionar} disabled={!texto.trim()}
+                className="shrink-0 px-3 rounded-lg bg-yellow-50 text-yellow-800 hover:bg-yellow-100 text-sm font-semibold cursor-pointer border-none disabled:opacity-50">
+          <i className="fas fa-plus"></i>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const ChipsDestaques = ({ lista }) => lista.length > 0 && (
+  <div className="flex flex-wrap gap-1 mt-1">
+    {lista.map(d => (
+      <span key={d} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-100 text-yellow-800">
+        <i className="fas fa-star text-[8px]"></i>{d}
+      </span>
+    ))}
+  </div>
+)
 
 // Converte a ficha do Bling no formato do formulário
 function paraForm(c) {
@@ -18,6 +65,8 @@ function paraForm(c) {
   return {
     nome:            c?.nome ?? '',
     apelido:         c?.apelido ?? '',
+    grupoId:         c?.grupoId ?? '',
+    destaques:       c?.destaques ?? [],
     fantasia:        c?.fantasia ?? '',
     tipo,
     numeroDocumento: formatarDocumento(c?.numeroDocumento ?? ''),
@@ -38,6 +87,7 @@ function paraForm(c) {
 function paraLista(c) {
   return {
     id: String(c.id), nome: c.nome, apelido: c.apelido ?? '', fantasia: c.fantasia ?? '',
+    grupoId: c.grupoId ?? null, destaques: c.destaques ?? [],
     codigo: c.codigo ?? '', situacao: c.situacao ?? 'A', tipo: c.tipo,
     numeroDocumento: soDigitos(c.numeroDocumento), telefone: c.telefone ?? '', celular: c.celular ?? '',
     email: c.email ?? '', municipio: c.endereco?.geral?.municipio ?? '', uf: c.endereco?.geral?.uf ?? '',
@@ -45,7 +95,7 @@ function paraLista(c) {
 }
 
 /* ── Formulário do cliente ── */
-function FormCliente({ id, inicial, onClose, onSaved, showToast }) {
+function FormCliente({ id, inicial, grupos, onClose, onSaved, showToast }) {
   const [form, setForm] = useRascunho(`rascunho:cliente:${id}`, inicial)
   const [erro, setErro]       = useState('')
   const [saving, setSaving]   = useState(false)
@@ -128,6 +178,28 @@ function FormCliente({ id, inicial, onClose, onSaved, showToast }) {
           </select>
         </div>
       </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className={labelCls}>Grupo / rede <span className="text-[11px] font-normal text-gray-400">só no site</span></label>
+          <select value={form.grupoId || ''} onChange={e => set('grupoId', e.target.value)} className={inputCls}>
+            <option value="">Sem grupo</option>
+            {grupos.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Destaques <span className="text-[11px] font-normal text-gray-400">aparecem nos pedidos</span></label>
+          <InputDestaques valor={form.destaques || []} onChange={v => set('destaques', v)} placeholder="Ex: Comprador: Sr. José" />
+        </div>
+      </div>
+      {(() => {
+        const g = grupos.find(x => x.id === form.grupoId)
+        return g?.destaques?.length > 0 && (
+          <div className="text-xs text-gray-500 -mt-2">
+            Destaques do grupo <strong>{g.nome}</strong> (valem para todas as filiais): <ChipsDestaques lista={g.destaques} />
+          </div>
+        )
+      })()}
 
       <div>
         <label className={labelCls}>{pj ? 'CNPJ' : 'CPF'}</label>
@@ -258,7 +330,7 @@ function FormCliente({ id, inicial, onClose, onSaved, showToast }) {
 }
 
 /* ── Modal do cliente (carrega a ficha completa do Bling) ── */
-function ModalCliente({ id, onClose, onSaved, showToast }) {
+function ModalCliente({ id, grupos, onClose, onSaved, showToast }) {
   const [inicial, setInicial] = useState(id === 'novo' ? paraForm(null) : null)
   const [erro, setErro] = useState('')
 
@@ -292,8 +364,169 @@ function ModalCliente({ id, onClose, onSaved, showToast }) {
             <i className="fas fa-spinner fa-spin"></i> Carregando ficha do Bling...
           </div>
         )}
-        {inicial && <FormCliente id={id} inicial={inicial} onClose={onClose} onSaved={onSaved} showToast={showToast} />}
+        {inicial && <FormCliente id={id} inicial={inicial} grupos={grupos} onClose={onClose} onSaved={onSaved} showToast={showToast} />}
       </div>
+    </div>
+  )
+}
+
+/* ── Modal do grupo (rede de filiais) ── */
+function ModalGrupo({ grupo, clientes, grupos, onClose, onSaved, onExcluido, showToast }) {
+  const chave = `rascunho:grupo:${grupo?.id ?? 'novo'}`
+  const [form, setForm] = useRascunho(chave, {
+    nome:       grupo?.nome ?? '',
+    destaques:  grupo?.destaques ?? [],
+    clienteIds: clientes.filter(c => grupo && c.grupoId === grupo.id).map(c => c.id),
+  })
+  const [busca, setBusca]   = useState('')
+  const [erro, setErro]     = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
+  }, [onClose])
+
+  const selecionados = new Set(form.clienteIds)
+  const alternar = id => setForm(f => ({
+    ...f, clienteIds: selecionados.has(id) ? f.clienteIds.filter(x => x !== id) : [...f.clienteIds, id],
+  }))
+  // Selecionados primeiro, depois os demais clientes ativos
+  const candidatos = ordenarClientes(filtrarClientes(clientes.filter(c => ativo(c) || selecionados.has(c.id)), busca, grupos))
+    .sort((a, b) => Number(selecionados.has(b.id)) - Number(selecionados.has(a.id)))
+  const nomeGrupo = id => grupos.find(g => g.id === id)?.nome
+
+  async function salvar(e) {
+    e.preventDefault()
+    setErro('')
+    setSaving(true)
+    try {
+      const salvo = await api('/clientes', { method: 'POST', body: { acao: 'grupo_salvar', grupo: { ...form, id: grupo?.id } } })
+      onSaved(salvo, !grupo)
+      onClose()
+    } catch (err) { setErro(err.message) }
+    finally { setSaving(false) }
+  }
+
+  async function excluir() {
+    if (!window.confirm(`Excluir o grupo "${grupo.nome}"?\n\nAs filiais continuam cadastradas, só deixam de estar agrupadas.`)) return
+    try {
+      await api('/clientes', { method: 'POST', body: { acao: 'grupo_excluir', id: grupo.id } })
+      onExcluido(grupo.id)
+      onClose()
+    } catch (err) { showToast(err.message, 'error') }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60"
+         onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="text-lg font-bold text-text-dark">{grupo ? 'Editar Grupo' : 'Novo Grupo'}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-primary transition-colors cursor-pointer bg-transparent border-none p-1">
+            <i className="fas fa-times text-xl"></i>
+          </button>
+        </div>
+
+        <form onSubmit={salvar} className="p-5 flex flex-col gap-4">
+          <div>
+            <label className={labelCls}>Nome do grupo *</label>
+            <input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} required
+                   placeholder="Ex: Supermercado Mais Econômico" className={inputCls} />
+          </div>
+
+          <div>
+            <label className={labelCls}>Destaques do grupo <span className="text-[11px] font-normal text-gray-400">valem para todas as filiais</span></label>
+            <InputDestaques valor={form.destaques} onChange={v => setForm(f => ({ ...f, destaques: v }))}
+                            placeholder="Ex: Pagamento só com boleto 28 dias" />
+          </div>
+
+          <div>
+            <label className={labelCls}>Filiais <span className="text-[11px] font-normal text-gray-400">{form.clienteIds.length} selecionada{form.clienteIds.length !== 1 ? 's' : ''}</span></label>
+            <div className="relative mb-2">
+              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+              <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar cliente para adicionar"
+                     className={inputCls + ' pl-9'} />
+            </div>
+            <div className="border-2 border-gray-100 rounded-lg max-h-72 overflow-y-auto divide-y divide-gray-100">
+              {candidatos.length === 0 && <p className="text-sm text-gray-400 p-4 text-center">Nenhum cliente encontrado.</p>}
+              {candidatos.map(c => {
+                const outro = c.grupoId && c.grupoId !== grupo?.id ? nomeGrupo(c.grupoId) : null
+                return (
+                  <label key={c.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50">
+                    <input type="checkbox" checked={selecionados.has(c.id)} onChange={() => alternar(c.id)}
+                           className="w-4 h-4 accent-[#d2691e]" />
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-semibold text-text-dark truncate">{nomeExibicao(c)}</span>
+                      <span className="block text-xs text-gray-400 truncate">
+                        {[formatarDocumento(c.numeroDocumento), c.municipio].filter(Boolean).join(' · ')}
+                        {outro && <span className="text-orange-600"> · hoje no grupo {outro}</span>}
+                      </span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          {erro && <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm" role="alert">{erro}</div>}
+
+          <div className="flex justify-between gap-3 pt-2 flex-wrap">
+            {grupo ? (
+              <button type="button" onClick={excluir}
+                      className="px-4 py-2.5 rounded-lg text-sm font-semibold bg-red-50 text-red-500 hover:bg-red-100 cursor-pointer border-none">
+                <i className="fas fa-trash mr-1.5"></i>Excluir grupo
+              </button>
+            ) : <span />}
+            <div className="flex gap-3">
+              <button type="button" onClick={onClose}
+                      className="px-5 py-2.5 border-2 border-gray-300 rounded-lg text-sm font-semibold text-text-dark hover:border-primary hover:text-primary transition-colors cursor-pointer">
+                Cancelar
+              </button>
+              <button type="submit" disabled={saving}
+                      className="px-6 py-2.5 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-dark-brown transition-colors disabled:opacity-60 cursor-pointer flex items-center gap-2">
+                <i className={`fas ${saving ? 'fa-spinner fa-spin' : 'fa-save'}`}></i>
+                {saving ? 'Salvando…' : 'Salvar grupo'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/* ── Linha de cliente na lista ── */
+function LinhaCliente({ c, grupos, emGrupo, onEditar, onSituacao }) {
+  const inativo = !ativo(c)
+  const fone = c.celular || c.telefone
+  return (
+    <div className={`flex items-center gap-3 p-3 sm:p-4 ${emGrupo ? 'sm:pl-8' : ''} ${inativo ? 'opacity-60' : ''}`}>
+      <div className="w-10 h-10 rounded-full bg-orange-50 text-primary flex items-center justify-center shrink-0 font-bold">
+        {nomeExibicao(c).charAt(0).toUpperCase() || '?'}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-text-dark text-sm truncate">
+          {nomeExibicao(c)}
+          {inativo && <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 align-middle">Inativo</span>}
+        </p>
+        {c.apelido && <p className="text-xs text-gray-500 truncate">{c.nome}</p>}
+        <p className="text-xs text-gray-400 truncate">
+          {[formatarDocumento(c.numeroDocumento), fone, c.municipio && `${c.municipio}${c.uf ? '/' + c.uf : ''}`].filter(Boolean).join(' · ') || 'Sem documento'}
+        </p>
+        <ChipsDestaques lista={emGrupo ? (c.destaques ?? []) : destaquesDoCliente(c, grupos)} />
+      </div>
+      <button onClick={() => onEditar(c.id)} title="Editar"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-semibold transition-colors cursor-pointer border-none">
+        <i className="fas fa-edit"></i><span className="hidden sm:inline">Editar</span>
+      </button>
+      <button onClick={() => onSituacao(c)} title={inativo ? 'Reativar' : 'Inativar'}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer border-none ${inativo ? 'bg-green-50 text-green-700 hover:bg-green-100' : 'bg-red-50 text-red-500 hover:bg-red-100'}`}>
+        <i className={`fas ${inativo ? 'fa-undo' : 'fa-user-slash'}`}></i>
+        <span className="hidden sm:inline">{inativo ? 'Reativar' : 'Inativar'}</span>
+      </button>
     </div>
   )
 }
@@ -301,6 +534,7 @@ function ModalCliente({ id, onClose, onSaved, showToast }) {
 /* ── Seção Clientes ── */
 export default function SecaoClientes({ showToast }) {
   const [clientes,     setClientes]     = useState([])
+  const [grupos,       setGrupos]       = useState([])
   const [ultimaSync,   setUltimaSync]   = useState(null)
   const [carregando,   setCarregando]   = useState(true)
   const [sincronizando, setSincronizando] = useState(false)
@@ -308,10 +542,12 @@ export default function SecaoClientes({ showToast }) {
   const [busca,  setBusca]  = useRascunho('admin:clientes:busca', '')
   const [filtro, setFiltro] = useRascunho('admin:clientes:filtro', 'ativos')
   const [modal,  setModal]  = useRascunho('admin:modalCliente', null)
+  const [modalGrupo, setModalGrupo] = useRascunho('admin:modalGrupo', null)
 
   async function carregarLista() {
     const r = await api('/clientes')
     setClientes(r.clientes)
+    setGrupos(r.grupos ?? [])
     setUltimaSync(r.ultimaSincronizacao)
     return r
   }
@@ -360,18 +596,65 @@ export default function SecaoClientes({ showToast }) {
     showToast(novo ? 'Cliente cadastrado no Bling!' : 'Cliente atualizado no Bling!')
   }
 
+  function handleGrupoSalvo(g, novo) {
+    const membros = new Set(g.clienteIds)
+    setGrupos(prev => novo ? [...prev, { id: g.id, nome: g.nome, destaques: g.destaques }]
+                           : prev.map(x => x.id === g.id ? { ...x, nome: g.nome, destaques: g.destaques } : x))
+    setClientes(prev => prev.map(c => membros.has(c.id) ? { ...c, grupoId: g.id }
+                                      : c.grupoId === g.id ? { ...c, grupoId: null } : c))
+    showToast(novo ? 'Grupo criado!' : 'Grupo atualizado!')
+  }
+
+  function handleGrupoExcluido(id) {
+    setGrupos(prev => prev.filter(g => g.id !== id))
+    setClientes(prev => prev.map(c => c.grupoId === id ? { ...c, grupoId: null } : c))
+    showToast('Grupo excluído.')
+  }
+
   function fecharModal() {
     limparRascunhos('rascunho:cliente:')
     setModal(null)
   }
 
+  function fecharModalGrupo() {
+    limparRascunhos('rascunho:grupo:')
+    setModalGrupo(null)
+  }
+
   const validos = clientes.filter(c => c.situacao !== 'E')
   const porFiltro = validos.filter(c => filtro === 'todos' || (filtro === 'ativos' ? ativo(c) : !ativo(c)))
-  const visiveis = ordenarClientes(filtrarClientes(porFiltro, busca))
+  const visiveis = ordenarClientes(filtrarClientes(porFiltro, busca, grupos))
   const qtdAtivos = validos.filter(ativo).length
+
+  // Agrupa a lista: grupos (por nome) com suas filiais, depois clientes sem grupo
+  const idsGrupos = new Set(grupos.map(g => g.id))
+  const secoes = ordenarClientes(grupos.map(g => ({ ...g, apelido: g.nome })))
+    .map(g => ({ grupo: g, clientes: visiveis.filter(c => c.grupoId === g.id) }))
+    .filter(s => s.clientes.length > 0)
+  const semGrupo = visiveis.filter(c => !c.grupoId || !idsGrupos.has(c.grupoId))
+
+  function imprimir() {
+    const linha = c => ({
+      nome:      nomeExibicao(c),
+      razao:     c.apelido ? c.nome : (c.fantasia && c.fantasia !== c.nome ? c.fantasia : ''),
+      documento: formatarDocumento(c.numeroDocumento),
+      telefone:  [c.celular, c.telefone].filter(Boolean).join(' / '),
+      cidade:    c.municipio ? `${c.municipio}${c.uf ? '/' + c.uf : ''}` : '',
+      destaques: c.destaques ?? [],
+    })
+    const rotulo = { ativos: 'Ativos', inativos: 'Inativos', todos: 'Todos' }[filtro]
+    gerarListaClientesPDF({
+      subtitulo: busca ? `${rotulo} · busca "${busca}"` : rotulo,
+      secoes: [
+        ...secoes.map(s => ({ titulo: s.grupo.nome, destaques: s.grupo.destaques, clientes: s.clientes.map(linha) })),
+        ...(semGrupo.length ? [{ titulo: secoes.length ? 'Sem grupo' : '', clientes: semGrupo.map(linha) }] : []),
+      ],
+    })
+  }
 
   const fmtData = ms => ms ? new Date(ms).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'nunca'
   const tabCls = sel => `px-3 py-1.5 rounded-lg text-sm font-semibold cursor-pointer border-none transition-colors ${sel ? 'bg-primary text-white' : 'bg-white text-text-dark hover:bg-gray-100'}`
+  const btnSec = 'flex items-center gap-2 bg-white border-2 border-primary text-primary px-3 py-2 rounded-lg font-semibold text-sm hover:bg-primary hover:text-white transition-colors cursor-pointer disabled:opacity-50'
 
   return (
     <>
@@ -379,14 +662,21 @@ export default function SecaoClientes({ showToast }) {
         <div>
           <h2 className="text-xl font-bold text-text-dark">Clientes</h2>
           <p className="text-sm text-gray-400 mt-0.5">
-            {qtdAtivos} ativo{qtdAtivos !== 1 ? 's' : ''} · sincronizado com o Bling em {fmtData(ultimaSync)}
+            {qtdAtivos} ativo{qtdAtivos !== 1 ? 's' : ''} · {grupos.length} grupo{grupos.length !== 1 ? 's' : ''} · sincronizado com o Bling em {fmtData(ultimaSync)}
           </p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => sincronizar()} disabled={sincronizando}
-                  className="flex items-center gap-2 bg-white border-2 border-primary text-primary px-3 py-2 rounded-lg font-semibold text-sm hover:bg-primary hover:text-white transition-colors cursor-pointer disabled:opacity-50">
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => sincronizar()} disabled={sincronizando} className={btnSec} title="Sincronizar com o Bling">
             <i className={`fas fa-sync-alt ${sincronizando ? 'fa-spin' : ''}`}></i>
             <span className="hidden sm:inline">{sincronizando ? 'Sincronizando…' : 'Sincronizar'}</span>
+          </button>
+          <button onClick={imprimir} disabled={visiveis.length === 0} className={btnSec} title="Imprimir lista">
+            <i className="fas fa-print"></i>
+            <span className="hidden sm:inline">Imprimir</span>
+          </button>
+          <button onClick={() => setModalGrupo('novo')} className={btnSec} title="Novo grupo">
+            <i className="fas fa-object-group"></i>
+            <span className="hidden sm:inline">Novo Grupo</span>
           </button>
           <button onClick={() => setModal('novo')}
                   className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-dark-brown transition-colors cursor-pointer border-none">
@@ -401,7 +691,7 @@ export default function SecaoClientes({ showToast }) {
         <div className="relative flex-1">
           <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
           <input value={busca} onChange={e => setBusca(e.target.value)}
-                 placeholder="Buscar por apelido, nome, CNPJ/CPF ou telefone"
+                 placeholder="Buscar por apelido, nome, grupo, CNPJ/CPF ou telefone"
                  className={inputCls + ' pl-9 bg-white'} />
         </div>
         <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
@@ -427,43 +717,45 @@ export default function SecaoClientes({ showToast }) {
         </div>
       )}
 
-      {visiveis.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100">
-          {visiveis.map(c => {
-            const inativo = !ativo(c)
-            const fone = c.celular || c.telefone
-            return (
-              <div key={c.id} className={`flex items-center gap-3 p-3 sm:p-4 ${inativo ? 'opacity-60' : ''}`}>
-                <div className="w-10 h-10 rounded-full bg-orange-50 text-primary flex items-center justify-center shrink-0 font-bold">
-                  {nomeExibicao(c).charAt(0).toUpperCase() || '?'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-text-dark text-sm truncate">
-                    {nomeExibicao(c)}
-                    {inativo && <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 align-middle">Inativo</span>}
-                  </p>
-                  {c.apelido && <p className="text-xs text-gray-500 truncate">{c.nome}</p>}
-                  <p className="text-xs text-gray-400 truncate">
-                    {[formatarDocumento(c.numeroDocumento), fone, c.municipio && `${c.municipio}${c.uf ? '/' + c.uf : ''}`].filter(Boolean).join(' · ') || 'Sem documento'}
-                  </p>
-                </div>
-                <button onClick={() => setModal(c.id)} title="Editar"
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-semibold transition-colors cursor-pointer border-none">
-                  <i className="fas fa-edit"></i><span className="hidden sm:inline">Editar</span>
-                </button>
-                <button onClick={() => alternarSituacao(c)} title={inativo ? 'Reativar' : 'Inativar'}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer border-none ${inativo ? 'bg-green-50 text-green-700 hover:bg-green-100' : 'bg-red-50 text-red-500 hover:bg-red-100'}`}>
-                  <i className={`fas ${inativo ? 'fa-undo' : 'fa-user-slash'}`}></i>
-                  <span className="hidden sm:inline">{inativo ? 'Reativar' : 'Inativar'}</span>
-                </button>
+      <div className="flex flex-col gap-4">
+        {secoes.map(({ grupo, clientes: membros }) => (
+          <div key={grupo.id} className="bg-white rounded-2xl shadow-sm border border-orange-100 overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3 bg-orange-50/60 border-b border-orange-100">
+              <i className="fas fa-object-group text-primary"></i>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-text-dark text-sm truncate">
+                  {grupo.nome} <span className="font-normal text-gray-400">· {membros.length} filia{membros.length !== 1 ? 'is' : 'l'}</span>
+                </p>
+                <ChipsDestaques lista={grupo.destaques ?? []} />
               </div>
-            )
-          })}
-        </div>
-      )}
+              <button onClick={() => setModalGrupo(grupo.id)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-primary hover:bg-orange-100 text-xs font-semibold transition-colors cursor-pointer border border-orange-200">
+                <i className="fas fa-edit"></i><span className="hidden sm:inline">Editar grupo</span>
+              </button>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {membros.map(c => (
+                <LinhaCliente key={c.id} c={c} grupos={grupos} emGrupo onEditar={setModal} onSituacao={alternarSituacao} />
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {semGrupo.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100">
+            {semGrupo.map(c => (
+              <LinhaCliente key={c.id} c={c} grupos={grupos} onEditar={setModal} onSituacao={alternarSituacao} />
+            ))}
+          </div>
+        )}
+      </div>
 
       {modal && (
-        <ModalCliente id={modal} onClose={fecharModal} onSaved={handleSaved} showToast={showToast} />
+        <ModalCliente id={modal} grupos={grupos} onClose={fecharModal} onSaved={handleSaved} showToast={showToast} />
+      )}
+      {(modalGrupo === 'novo' || grupos.some(g => g.id === modalGrupo)) && (
+        <ModalGrupo grupo={grupos.find(g => g.id === modalGrupo) ?? null} clientes={validos} grupos={grupos}
+                    onClose={fecharModalGrupo} onSaved={handleGrupoSalvo} onExcluido={handleGrupoExcluido} showToast={showToast} />
       )}
     </>
   )
