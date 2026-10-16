@@ -6,6 +6,7 @@ import { useRascunho, limparRascunhos } from '../../hooks/useRascunho.js'
 import { api } from '../../lib/api.js'
 import SecaoClientes from './Clientes.jsx'
 import SecaoCriarPedido from './CriarPedido.jsx'
+import SecaoPedidos from './Pedidos.jsx'
 import VinculoBling from './VinculoBling.jsx'
 import { auth, db } from '../../lib/firebase.js'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
@@ -844,6 +845,7 @@ export default function Dashboard() {
   const navItems = [
     { id: 'catalogo', icon: 'fa-box',      label: 'Catálogo' },
     { id: 'pedidos',  icon: 'fa-cart-plus', label: 'Criar Pedido' },
+    { id: 'listaPedidos', icon: 'fa-clipboard-list', label: 'Pedidos' },
     { id: 'clientes', icon: 'fa-users',    label: 'Clientes' },
     { id: 'site',     icon: 'fa-globe',    label: 'Site'     },
     { id: 'bling',    icon: 'fa-plug',     label: 'Bling'    },
@@ -1036,6 +1038,9 @@ export default function Dashboard() {
             </>
           )}
 
+          {/* ── Pedidos (lista) ── */}
+          {activeSection === 'listaPedidos' && <SecaoPedidos showToast={showToast} irPara={setActiveSection} />}
+
           {/* ── Clientes ── */}
           {activeSection === 'clientes' && <SecaoClientes showToast={showToast} />}
 
@@ -1167,16 +1172,16 @@ export default function Dashboard() {
       </div>
 
       {/* Bottom nav — mobile */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex md:hidden z-40 shadow-lg">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex md:hidden z-40 shadow-lg overflow-x-auto">
         {navItems.map(item => (
           <button key={item.id} onClick={() => setActiveSection(item.id)}
-                  className={`flex-1 flex flex-col items-center py-3 gap-1 transition-colors cursor-pointer border-none ${activeSection === item.id ? 'text-primary bg-orange-50/60' : 'text-gray-500 bg-transparent'}`}>
+                  className={`flex-1 min-w-[68px] shrink-0 flex flex-col items-center py-3 gap-1 transition-colors cursor-pointer border-none ${activeSection === item.id ? 'text-primary bg-orange-50/60' : 'text-gray-500 bg-transparent'}`}>
             <i className={`fas ${item.icon} text-xl`}></i>
-            <span className="text-[10px] font-medium">{item.label}</span>
+            <span className="text-[10px] font-medium whitespace-nowrap">{item.label}</span>
           </button>
         ))}
         <button onClick={sair}
-                className="flex-1 flex flex-col items-center py-3 gap-1 text-gray-500 bg-transparent border-none cursor-pointer">
+                className="flex-1 min-w-[68px] shrink-0 flex flex-col items-center py-3 gap-1 text-gray-500 bg-transparent border-none cursor-pointer">
           <i className="fas fa-sign-out-alt text-xl"></i>
           <span className="text-[10px] font-medium">Sair</span>
         </button>

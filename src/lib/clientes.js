@@ -11,7 +11,7 @@ export function formatarDocumento(doc) {
   return doc || ''
 }
 
-const semAcento = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+const semAcento = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
 // Nome principal para exibir: apelido, se houver; senão o nome do Bling
 export function nomeExibicao(c) {

@@ -8,7 +8,7 @@ export async function carregarProdutosBling(forcar = false) {
   return cacheProdutos
 }
 
-const semAcento = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+const semAcento = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
 // Escolhe o produto do Bling correspondente a um produto do Catálogo
 export default function VinculoBling({ valor, onChange, inputCls }) {

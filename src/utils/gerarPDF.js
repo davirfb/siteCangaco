@@ -292,10 +292,15 @@ export async function gerarCatalogoPDF(produtos) {
 }
 
 /* ── PDF de Pedido ── */
-export function gerarPedidoPDF({ cliente, cnpj, itens, total, obs, titulo = 'PEDIDO', numero }) {
-  const doc  = new jsPDF({ unit: 'mm', format: 'a4' })
-  const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+const brlPDF = v => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`
 
+function dataExtenso(iso) {
+  const d = iso ? new Date(`${iso}T12:00:00`) : new Date()
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+}
+
+// Desenha um pedido/orçamento a partir da página atual (quebra página se tiver muitos itens)
+function desenharPedido(doc, { cliente, cnpj, itens, total, obs, titulo = 'PEDIDO', numero, data, situacao }) {
   // ── Cabeçalho ──
   doc.setFillColor(...COR_PRIMARY)
   doc.rect(0, 0, W, 32, 'F')
@@ -308,7 +313,7 @@ export function gerarPedidoPDF({ cliente, cnpj, itens, total, obs, titulo = 'PED
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(11)
   doc.text('Cangaço Alimentos', W - MARGIN, 13, { align: 'right' })
-  doc.text(hoje, W - MARGIN, 24, { align: 'right' })
+  doc.text(dataExtenso(data), W - MARGIN, 24, { align: 'right' })
 
   // ── Dados do cliente ──
   let y = 44
@@ -322,11 +327,12 @@ export function gerarPedidoPDF({ cliente, cnpj, itens, total, obs, titulo = 'PED
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   doc.text('CLIENTE', MARGIN + 5, y + 8)
+  if (situacao) doc.text(situacao.toUpperCase(), W - MARGIN - 5, y + 8, { align: 'right' })
 
   doc.setTextColor(...COR_DARK)
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(18)
-  doc.text(cliente || '—', MARGIN + 5, y + 21)
+  doc.setFontSize(cliente && cliente.length > 34 ? 14 : 18)
+  doc.text(doc.splitTextToSize(cliente || '—', cnpj ? 115 : 170)[0], MARGIN + 5, y + 21)
 
   if (cnpj) {
     doc.setFont('helvetica', 'normal')
@@ -337,104 +343,160 @@ export function gerarPedidoPDF({ cliente, cnpj, itens, total, obs, titulo = 'PED
 
   y += 42
 
-  // ── Cabeçalho da tabela ──
-  doc.setFillColor(...COR_DARK)
-  doc.rect(MARGIN, y, W - MARGIN * 2, 12, 'F')
-
-  doc.setTextColor(255, 255, 255)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.text('PRODUTO', MARGIN + 4, y + 8)
-  doc.text('QTD', 138, y + 8, { align: 'center' })
-  doc.text('UNIT.', 160, y + 8, { align: 'center' })
-  doc.text('SUBTOTAL', W - MARGIN - 4, y + 8, { align: 'right' })
-
-  y += 12
+  const cabecalhoTabela = () => {
+    doc.setFillColor(...COR_DARK)
+    doc.rect(MARGIN, y, W - MARGIN * 2, 12, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.text('PRODUTO', MARGIN + 4, y + 8)
+    doc.text('QTD', 138, y + 8, { align: 'center' })
+    doc.text('UNIT.', 160, y + 8, { align: 'center' })
+    doc.text('SUBTOTAL', W - MARGIN - 4, y + 8, { align: 'right' })
+    y += 12
+  }
+  cabecalhoTabela()
 
   // ── Linhas de produto ──
   itens.forEach((it, i) => {
     const ROW_H = 16
+    if (y + ROW_H > H - 20) { rodape(doc); doc.addPage(); y = 16; cabecalhoTabela() }
     doc.setFillColor(i % 2 === 0 ? 252 : 245, i % 2 === 0 ? 252 : 245, i % 2 === 0 ? 252 : 248)
     doc.rect(MARGIN, y, W - MARGIN * 2, ROW_H, 'F')
 
-    // Nome (truncado se muito longo)
-    const nomeMax = doc.splitTextToSize(it.nome, 108)
+    const nomeMax = doc.splitTextToSize(it.nome || '—', 108)
     doc.setTextColor(...COR_DARK)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(14)
     doc.text(nomeMax[0], MARGIN + 4, y + 10.5)
 
-    // Quantidade
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(15)
-    doc.setTextColor(...COR_DARK)
     doc.text(String(it.quantidade), 138, y + 10.5, { align: 'center' })
 
-    // Preço unitário
     doc.setFontSize(14)
     doc.setTextColor(...COR_LIGHT)
-    doc.text(`R$ ${Number(it.precoUnitario).toFixed(2).replace('.', ',')}`, 160, y + 10.5, { align: 'center' })
+    doc.text(brlPDF(it.precoUnitario), 160, y + 10.5, { align: 'center' })
 
-    // Subtotal
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(15)
     doc.setTextColor(...COR_PRIMARY)
-    doc.text(
-      `R$ ${(it.quantidade * it.precoUnitario).toFixed(2).replace('.', ',')}`,
-      W - MARGIN - 4, y + 10.5, { align: 'right' }
-    )
+    doc.text(brlPDF(it.quantidade * it.precoUnitario), W - MARGIN - 4, y + 10.5, { align: 'right' })
 
     y += ROW_H
   })
 
-  // Linha separadora
   doc.setDrawColor(...COR_BORDER)
   doc.setLineWidth(0.5)
   doc.line(MARGIN, y, W - MARGIN, y)
   y += 10
 
   // ── Total ──
+  if (y + 22 > H - 16) { rodape(doc); doc.addPage(); y = 16 }
   doc.setFillColor(...COR_PRIMARY)
   doc.roundedRect(MARGIN, y, W - MARGIN * 2, 22, 3, 3, 'F')
-
   doc.setTextColor(255, 255, 255)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(12)
-  doc.text('TOTAL DO PEDIDO', MARGIN + 8, y + 9)
-
+  doc.text(titulo === 'ORÇAMENTO' ? 'TOTAL DO ORÇAMENTO' : 'TOTAL DO PEDIDO', MARGIN + 8, y + 9)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(24)
-  doc.text(`R$ ${total.toFixed(2).replace('.', ',')}`, W - MARGIN - 8, y + 16, { align: 'right' })
-
+  doc.text(brlPDF(total), W - MARGIN - 8, y + 16, { align: 'right' })
   y += 32
 
   // ── Observações ──
   if (obs && obs.trim()) {
+    const obsLines = doc.splitTextToSize(obs.trim(), W - MARGIN * 2 - 10)
+    const obsH = 14 + obsLines.length * 7
+    if (y + obsH > H - 16) { rodape(doc); doc.addPage(); y = 16 }
     doc.setFillColor(245, 245, 245)
     doc.setDrawColor(...COR_BORDER)
     doc.setLineWidth(0.3)
-    const obsLines = doc.splitTextToSize(obs.trim(), W - MARGIN * 2 - 10)
-    const obsH = 14 + obsLines.length * 7
     doc.roundedRect(MARGIN, y, W - MARGIN * 2, obsH, 3, 3, 'FD')
-
     doc.setTextColor(...COR_PRIMARY)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10)
     doc.text('OBSERVAÇÕES', MARGIN + 5, y + 8)
-
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(13)
     doc.setTextColor(...COR_DARK)
     doc.text(obsLines, MARGIN + 5, y + 17)
-    y += obsH + 10
   }
 
-  // ── Rodapé ──
+  rodape(doc)
+}
+
+export function gerarPedidoPDF(pedido) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const titulo = pedido.titulo ?? 'PEDIDO'
+  desenharPedido(doc, { ...pedido, titulo })
+  const tituloArq = titulo === 'ORÇAMENTO' ? 'orcamento' : titulo.toLowerCase()
+  const nomeArq = `${tituloArq}${pedido.numero ? '-' + pedido.numero : ''}-${(pedido.cliente || 'cliente').replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`
+  doc.save(nomeArq)
+}
+
+// Vários pedidos num único PDF (um por página) + página de resumo no final
+export function gerarPedidosPDF(pedidos, { descricao = 'Pedidos', arquivo = 'pedidos' } = {}) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  pedidos.forEach((p, i) => {
+    if (i > 0) doc.addPage()
+    desenharPedido(doc, p)
+  })
+
+  // ── Resumo ──
+  doc.addPage()
+  doc.setFillColor(...COR_PRIMARY)
+  doc.rect(0, 0, W, 26, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(18)
+  doc.text('RESUMO', MARGIN, 16)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+  doc.text(`${descricao} · ${pedidos.length} pedido${pedidos.length !== 1 ? 's' : ''} · ${new Date().toLocaleDateString('pt-BR')}`, W - MARGIN, 16, { align: 'right' })
+
+  let y = 36
+  const cab = () => {
+    doc.setFillColor(...COR_DARK)
+    doc.rect(MARGIN, y, W - MARGIN * 2, 9, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.text('Nº', MARGIN + 3, y + 6)
+    doc.text('DATA', MARGIN + 22, y + 6)
+    doc.text('CLIENTE', MARGIN + 46, y + 6)
+    doc.text('SITUAÇÃO', 150, y + 6)
+    doc.text('TOTAL', W - MARGIN - 3, y + 6, { align: 'right' })
+    y += 9
+  }
+  cab()
+  pedidos.forEach((p, i) => {
+    if (y + 8 > H - 26) { rodape(doc); doc.addPage(); y = 16; cab() }
+    if (i % 2 === 1) { doc.setFillColor(250, 247, 240); doc.rect(MARGIN, y, W - MARGIN * 2, 8, 'F') }
+    doc.setTextColor(...COR_DARK)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.text(p.numero ? String(p.numero) : (p.titulo === 'ORÇAMENTO' ? 'Orç.' : '—'), MARGIN + 3, y + 5.5)
+    doc.text(p.data ? new Date(`${p.data}T12:00:00`).toLocaleDateString('pt-BR') : '—', MARGIN + 22, y + 5.5)
+    doc.text(doc.splitTextToSize(p.cliente || '—', 98)[0], MARGIN + 46, y + 5.5)
+    doc.text(doc.splitTextToSize(p.situacao || '', 28)[0] || '', 150, y + 5.5)
+    doc.setFont('helvetica', 'bold')
+    doc.text(brlPDF(p.total), W - MARGIN - 3, y + 5.5, { align: 'right' })
+    y += 8
+  })
+  const soma = pedidos.reduce((acc, p) => acc + Number(p.total || 0), 0)
+  y += 4
+  doc.setFillColor(...COR_PRIMARY)
+  doc.roundedRect(MARGIN, y, W - MARGIN * 2, 14, 2, 2, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.text('TOTAL GERAL', MARGIN + 5, y + 9)
+  doc.setFontSize(14)
+  doc.text(brlPDF(soma), W - MARGIN - 5, y + 9.5, { align: 'right' })
   rodape(doc)
 
-  const tituloArq = titulo === 'ORÇAMENTO' ? 'orcamento' : titulo.toLowerCase()
-  const nomeArq = `${tituloArq}${numero ? '-' + numero : ''}-${(cliente || 'cliente').replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`
-  doc.save(nomeArq)
+  doc.save(`${arquivo}-${new Date().toISOString().slice(0, 10)}.pdf`)
 }
 
 // Lista de clientes (A4 deitado), agrupada por rede/grupo

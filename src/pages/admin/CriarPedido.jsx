@@ -99,6 +99,23 @@ function EscolherProduto({ produtos, valor, tabela, onEscolher }) {
   )
 }
 
+// Abre um pedido em aberto (edição) ou um orçamento no formulário do Criar Pedido.
+// Escreve direto no rascunho; a seção lê ao ser aberta.
+export function abrirNoCriarPedido({ cliente, clienteNome, itens, obs, formaPagamentoId, prazoDias, dataEntrega, tabela, editandoId, editandoNumero, orcamentoId }) {
+  const grava = (k, v) => { try { localStorage.setItem(PREFIXO + k, JSON.stringify(v)) } catch {} }
+  limparRascunhos(PREFIXO)
+  grava('cliente', cliente ?? null)
+  grava('texto', cliente ? '' : (clienteNome ?? ''))
+  grava('itens', itens ?? [])
+  grava('obs', obs ?? '')
+  if (formaPagamentoId) grava('formaId', formaPagamentoId)
+  grava('prazo', prazoDias ?? 0)
+  grava('entrega', dataEntrega || hojeISO())
+  if (tabela) grava('tabela', tabela)
+  grava('edicao', editandoId ? { id: editandoId, numero: editandoNumero ?? null } : null)
+  grava('orcamentoId', orcamentoId ?? null)
+}
+
 /* ── Autocompletar de cliente ── */
 function BuscaCliente({ clientes, grupos, texto, setTexto, onEscolher, onNovo, carregando }) {
   const [aberto, setAberto] = useState(false)
@@ -177,6 +194,8 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
   const [editFardo,  setEditFardo]  = useState(false)
   const [nFardos,    setNFardos]    = useState('')
   const [novoCliente, setNovoCliente] = useRascunho('admin:criarPedido:novoCliente', false)
+  const [edicao,      setEdicao]      = useRascunho(PREFIXO + 'edicao', null)
+  const [orcamentoId, setOrcamentoId] = useRascunho(PREFIXO + 'orcamentoId', null)
 
   const [clientes, setClientes] = useState([])
   const [grupos,   setGrupos]   = useState([])
@@ -201,8 +220,8 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
   const ativos = produtos.filter(p => p.ativo !== false)
   const total  = itens.reduce((acc, it) => acc + it.quantidade * it.precoUnitario, 0)
   // Vínculo com o Bling sempre lido do Catálogo atual (pode ter sido feito depois de adicionar o item)
-  const blingDe = produtoId => produtos.find(p => p.id === produtoId)?.blingProdutoId ?? null
-  const semVinculo = itens.filter(it => !blingDe(it.produtoId))
+  const blingDe = it => produtos.find(p => p.id === it.produtoId)?.blingProdutoId ?? it.blingProdutoId ?? null
+  const semVinculo = itens.filter(it => !blingDe(it))
   // Fardo do Catálogo, ou o personalizado neste pedido
   const fardoPadrao = produtoId => produtos.find(p => p.id === produtoId)?.qtdFardo ?? 0
   const fardoDe = produtoId => Number(fardosCustom[produtoId]) || fardoPadrao(produtoId)
@@ -263,8 +282,9 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
     return {
       cliente,
       clienteNome: texto.trim(),
-      itens: itens.map(it => ({ ...it, blingProdutoId: blingDe(it.produtoId) })),
-      obs, formaPagamentoId: formaId, prazoDias: prazo, dataEntrega: entrega,
+      itens: itens.map(it => ({ ...it, blingProdutoId: blingDe(it) })),
+      obs, formaPagamentoId: formaId, prazoDias: prazo, dataEntrega: entrega, tabela,
+      orcamentoId: orcamentoId ?? undefined,
     }
   }
 
@@ -281,7 +301,7 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
     if (!itens.length) { setErro('Adicione ao menos um produto.'); return }
     setEnviando('orcamento')
     try {
-      const r = await api('/pedidos', { method: 'POST', body: { acao: 'orcamento_salvar', orcamento: payload() } })
+      const r = await api('/pedidos', { method: 'POST', body: { acao: 'orcamento_salvar', orcamento: { ...payload(), id: orcamentoId ?? undefined } } })
       setResultado(snapshot({ tipo: 'orcamento', id: r.id }))
     } catch (err) { setErro(err.message) }
     finally { setEnviando('') }
@@ -293,13 +313,17 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
     if (!itens.length) { setErro('Adicione ao menos um produto.'); return }
     if (semVinculo.length) { setErro(`Vincule ao Bling no Catálogo: ${semVinculo.map(i => i.nome).join(', ')}.`); return }
     const forma = formas.find(f => f.id === formaId)?.descricao ?? '—'
-    if (!window.confirm(
-      `Criar pedido no Bling?\n\nCliente: ${nomeCliente}\nTotal: ${brl(total)}\nPagamento: ${forma}, ${Number(prazo) ? prazo + ' dias' : 'à vista'}\n\nO pedido entra no Bling como "Em aberto".`
+    const resumo = `Cliente: ${nomeCliente}\nTotal: ${brl(total)}\nPagamento: ${forma}, ${Number(prazo) ? prazo + ' dias' : 'à vista'}`
+    if (!window.confirm(edicao
+      ? `Salvar alterações no pedido nº ${edicao.numero ?? ''} no Bling?\n\n${resumo}`
+      : `Criar pedido no Bling?\n\n${resumo}\n\nO pedido entra no Bling como "Em aberto".`
     )) return
     setEnviando('pedido')
     try {
-      const r = await api('/pedidos', { method: 'POST', body: { acao: 'criar', pedido: payload() } })
-      setResultado(snapshot({ tipo: 'pedido', id: r.id, numero: r.numero }))
+      const r = edicao
+        ? await api('/pedidos', { method: 'POST', body: { acao: 'editar', id: edicao.id, pedido: payload() } })
+        : await api('/pedidos', { method: 'POST', body: { acao: 'criar', pedido: payload() } })
+      setResultado(snapshot({ tipo: 'pedido', id: r.id, numero: r.numero, editado: !!edicao }))
     } catch (err) { setErro(err.message) }
     finally { setEnviando('') }
   }
@@ -308,6 +332,7 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
     limparRascunhos(PREFIXO)
     setCliente(null); setTexto(''); setItens([]); setProdSel(''); setQtdSel(1); setPrecoSel('')
     setObs(''); setPrazo(0); setEntrega(hojeISO()); setResultado(null); setTabela('atacado'); setFardosCustom({})
+    setEdicao(null); setOrcamentoId(null)
     setFormaId(formas.find(f => f.padrao)?.id || formas[0]?.id || '')
   }
 
@@ -336,7 +361,9 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
         </div>
         <div>
           <p className="text-xl font-bold text-text-dark mb-1">
-            {pedido ? `Pedido${resultado.numero ? ' nº ' + resultado.numero : ''} criado no Bling!` : 'Orçamento salvo!'}
+            {pedido
+              ? `Pedido${resultado.numero ? ' nº ' + resultado.numero : ''} ${resultado.editado ? 'alterado' : 'criado'} no Bling!`
+              : 'Orçamento salvo!'}
           </p>
           <p className="text-gray-400 text-sm">
             {resultado.cliente} · {brl(resultado.total)}
@@ -369,6 +396,19 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
 
   return (
     <div className="max-w-2xl flex flex-col gap-5">
+
+      {(edicao || orcamentoId) && (
+        <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border-2 ${edicao ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-purple-50 border-purple-200 text-purple-800'}`}>
+          <i className={`fas ${edicao ? 'fa-edit' : 'fa-file-alt'}`}></i>
+          <p className="flex-1 text-sm font-semibold">
+            {edicao ? `Editando o pedido nº ${edicao.numero ?? ''} (em aberto no Bling)` : 'Editando um orçamento salvo'}
+          </p>
+          <button type="button" onClick={() => { if (window.confirm('Descartar e começar um pedido novo?')) novoPedido() }}
+                  className="text-xs font-semibold underline cursor-pointer bg-transparent border-none text-current">
+            Descartar
+          </button>
+        </div>
+      )}
 
       {/* Cliente */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col gap-4">
@@ -517,7 +557,7 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
                       {it.quantidade / fardoDe(it.produtoId)} fardo{it.quantidade / fardoDe(it.produtoId) > 1 ? 's' : ''} de {fardoDe(it.produtoId)} un
                     </p>
                   )}
-                  {!blingDe(it.produtoId) && (
+                  {!blingDe(it) && (
                     <p className="text-[11px] text-red-500"><i className="fas fa-unlink mr-1"></i>Sem vínculo com o Bling</p>
                   )}
                 </div>
@@ -603,15 +643,15 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
 
       {/* Ações */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <button onClick={salvarOrcamento} disabled={!!enviando || !itens.length}
+        {!edicao && <button onClick={salvarOrcamento} disabled={!!enviando || !itens.length}
                 className="flex-1 flex items-center justify-center gap-2 bg-white border-2 border-primary text-primary py-3.5 rounded-xl font-bold hover:bg-primary hover:text-white transition-colors cursor-pointer disabled:opacity-50">
           <i className={`fas ${enviando === 'orcamento' ? 'fa-spinner fa-spin' : 'fa-file-alt'}`}></i>
-          {enviando === 'orcamento' ? 'Salvando…' : 'Salvar como orçamento'}
-        </button>
+          {enviando === 'orcamento' ? 'Salvando…' : orcamentoId ? 'Atualizar orçamento' : 'Salvar como orçamento'}
+        </button>}
         <button onClick={criarPedido} disabled={!!enviando || !itens.length || !cliente}
                 className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3.5 rounded-xl font-bold hover:bg-dark-brown transition-colors cursor-pointer border-none disabled:opacity-50">
           <i className={`fas ${enviando === 'pedido' ? 'fa-spinner fa-spin' : 'fa-paper-plane'}`}></i>
-          {enviando === 'pedido' ? 'Criando no Bling…' : 'Criar pedido no Bling'}
+          {enviando === 'pedido' ? 'Enviando ao Bling…' : edicao ? 'Salvar alterações no Bling' : orcamentoId ? 'Converter em pedido no Bling' : 'Criar pedido no Bling'}
         </button>
       </div>
 
