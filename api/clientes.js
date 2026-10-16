@@ -20,7 +20,7 @@ const limparDestaques = lista => [...new Set((Array.isArray(lista) ? lista : [])
 
 // Campos que existem só no site
 function camposSite(c) {
-  return { apelido: c?.apelido ?? '', destaques: c?.destaques ?? [], grupoId: c?.grupoId ?? null }
+  return { apelido: c?.apelido ?? '', destaques: c?.destaques ?? [], grupoId: c?.grupoId ?? null, tabelaPreco: c?.tabelaPreco ?? null }
 }
 
 const pick = (obj, campos) => Object.fromEntries(campos.filter(k => obj?.[k] !== undefined).map(k => [k, obj[k]]))
@@ -65,6 +65,7 @@ async function salvar(cliente) {
     apelido:   (cliente.apelido ?? '').trim(),
     destaques: limparDestaques(cliente.destaques),
     grupoId:   cliente.grupoId || null,
+    tabelaPreco: ['varejo', 'atacado'].includes(cliente.tabelaPreco) ? cliente.tabelaPreco : null,
   }, { merge: true })
   return detalhe(id)
 }

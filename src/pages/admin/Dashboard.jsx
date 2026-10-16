@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { gerarCatalogoPDF, gerarPedidoPDF } from '../../utils/gerarPDF.js'
+import { gerarCatalogoPDF } from '../../utils/gerarPDF.js'
 import { visivelNoSite } from '../../utils/produtos.js'
 import { useRascunho, limparRascunhos } from '../../hooks/useRascunho.js'
 import { api } from '../../lib/api.js'
 import SecaoClientes from './Clientes.jsx'
+import SecaoCriarPedido from './CriarPedido.jsx'
+import VinculoBling from './VinculoBling.jsx'
 import { auth, db } from '../../lib/firebase.js'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import {
@@ -14,15 +16,6 @@ import {
 
 const CLOUD      = 'dykq5hssj'
 const PRESET     = 'cangaco_produtos'
-const WA_NUMERO  = '5561984274420'
-
-function formatCNPJ(v) {
-  return v.replace(/\D/g, '').substring(0, 14)
-    .replace(/^(\d{2})(\d)/, '$1.$2')
-    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/\.(\d{3})(\d)/, '.$1/$2')
-    .replace(/(\d{4})(\d)/, '$1-$2')
-}
 
 function compressImage(file, maxPx = 1920, quality = 0.82) {
   return new Promise((resolve) => {
@@ -226,11 +219,15 @@ function ModalProduto({ produto, onClose, onSaved }) {
   const [nome,         setNome]        = useRascunho(r('nome'),         produto?.nome         ?? '')
   const [preco,        setPreco]       = useRascunho(r('preco'),        produto?.preco        ?? '')
   const [precoAtacado, setPrecoAtacado]= useRascunho(r('precoAtacado'), produto?.precoAtacado ?? '')
+  const [qtdFardo,     setQtdFardo]    = useRascunho(r('qtdFardo'),     produto?.qtdFardo     ?? '')
   const [descricao,    setDescricao]   = useRascunho(r('descricao'),    produto?.descricao    ?? '')
   const [destaque,     setDestaque]    = useRascunho(r('destaque'),     produto?.destaque     ?? false)
   const [ativo,        setAtivo]       = useRascunho(r('ativo'),        produto?.ativo !== false)
   const [atacado,      setAtacado]     = useRascunho(r('atacado'),
     produto?.atacado?.length ? produto.atacado : []
+  )
+  const [blingProduto, setBlingProduto] = useRascunho(r('blingProduto'),
+    produto?.blingProdutoId ? { id: produto.blingProdutoId, nome: produto.blingProdutoNome ?? '' } : null
   )
   const [previewSrc, setPreviewSrc] = useState(produto?.imagem || null)
   const [dragOver,   setDragOver]   = useState(false)
@@ -273,9 +270,12 @@ function ModalProduto({ produto, onClose, onSaved }) {
         descricao:    descricao.trim(),
         preco:        parseFloat(preco),
         precoAtacado: precoAtacado !== '' ? parseFloat(precoAtacado) : null,
+        qtdFardo:     parseInt(qtdFardo) > 1 ? parseInt(qtdFardo) : null,
         imagem:       imagemUrl,
         destaque,
         ativo,
+        blingProdutoId:   blingProduto?.id ?? null,
+        blingProdutoNome: blingProduto?.nome ?? null,
         atacado: normalizarFaixas(atacado),
         atualizadoEm: serverTimestamp(),
         ...((!produto?.id || parseFloat(preco) !== Number(produto?.preco)) && {
@@ -338,10 +338,27 @@ function ModalProduto({ produto, onClose, onSaved }) {
           </div>
 
           <div>
+            <label className="block mb-1 text-sm font-semibold text-text-dark">
+              Unidades por fardo
+              <span className="ml-1 text-[11px] font-normal text-gray-400">opcional — vira atalho de quantidade nos pedidos</span>
+            </label>
+            <input type="number" value={qtdFardo} onChange={e => setQtdFardo(e.target.value)}
+                   step="1" min="2" placeholder="Ex: 12" className={inputCls} />
+          </div>
+
+          <div>
             <label className="block mb-1 text-sm font-semibold text-text-dark">Descrição</label>
             <textarea value={descricao} onChange={e => setDescricao(e.target.value)}
                       rows={3} placeholder="Descrição do produto..."
                       className={inputCls + ' resize-y'} />
+          </div>
+
+          <div>
+            <label className="block mb-1 text-sm font-semibold text-text-dark">
+              Produto no Bling
+              <span className="ml-1 text-[11px] font-normal text-gray-400">necessário para criar pedidos e notas</span>
+            </label>
+            <VinculoBling valor={blingProduto} onChange={setBlingProduto} inputCls={inputCls} />
           </div>
 
           <div>
@@ -600,305 +617,6 @@ function ModalConfirmar({ titulo, onConfirm, onClose }) {
   )
 }
 
-/* ── Seção Criar Pedido (sem banco de dados) ── */
-function SecaoPedido({ produtos }) {
-  const [cliente,    setCliente]    = useRascunho('rascunho:pedido:cliente', '')
-  const [cnpj,       setCnpj]       = useRascunho('rascunho:pedido:cnpj', '')
-  const [obs,        setObs]        = useRascunho('rascunho:pedido:obs', '')
-  const [itens,      setItens]      = useRascunho('rascunho:pedido:itens', [])
-  const [prodSel,    setProdSel]    = useRascunho('rascunho:pedido:prodSel', '')
-  const [qtdSel,     setQtdSel]     = useRascunho('rascunho:pedido:qtdSel', 1)
-  const [precoSel,   setPrecoSel]   = useRascunho('rascunho:pedido:precoSel', '')
-  const [gerando,    setGerando]    = useState(false)
-  const [concluido,  setConcluido]  = useRascunho('rascunho:pedido:concluido', false)
-  const [perguntaPDF, setPerguntaPDF] = useRascunho('rascunho:pedido:perguntaPDF', false)
-
-  const ativos = produtos.filter(p => p.ativo !== false)
-  const total  = itens.reduce((acc, it) => acc + it.quantidade * it.precoUnitario, 0)
-
-  function handleSelectProduto(id) {
-    setProdSel(id)
-    const p = ativos.find(p => p.id === id)
-    if (p) setPrecoSel(p.precoAtacado != null ? p.precoAtacado : p.preco ?? '')
-    else   setPrecoSel('')
-  }
-
-  function adicionarItem() {
-    if (!prodSel || !qtdSel || precoSel === '') return
-    const p = ativos.find(p => p.id === prodSel)
-    if (!p) return
-    const idx = itens.findIndex(i => i.produtoId === prodSel)
-    if (idx !== -1) {
-      setItens(prev => prev.map((it, i) =>
-        i === idx ? { ...it, quantidade: it.quantidade + Number(qtdSel), precoUnitario: Number(precoSel) } : it
-      ))
-    } else {
-      setItens(prev => [...prev, {
-        produtoId: prodSel, nome: p.nome, imagem: p.imagem,
-        quantidade: Number(qtdSel), precoUnitario: Number(precoSel),
-      }])
-    }
-    setProdSel(''); setQtdSel(1); setPrecoSel('')
-  }
-
-  function removerItem(idx) { setItens(prev => prev.filter((_, i) => i !== idx)) }
-
-  function atualizarItem(idx, campo, valor) {
-    setItens(prev => prev.map((it, i) => i === idx ? { ...it, [campo]: Number(valor) } : it))
-  }
-
-  function limparFormulario() {
-    setCliente(''); setCnpj(''); setObs(''); setItens([])
-    setProdSel(''); setQtdSel(1); setPrecoSel('')
-    setConcluido(false); setPerguntaPDF(false)
-  }
-
-  function enviarWhatsApp() {
-    if (!cliente.trim() || itens.length === 0) return
-
-    const linhas = itens.map(it =>
-      `• ${it.nome} ×${it.quantidade} — R$ ${(it.quantidade * it.precoUnitario).toFixed(2).replace('.', ',')}`
-    ).join('\n')
-
-    const partes = [
-      '🛍️ *NOVO PEDIDO*',
-      '',
-      `👤 *Cliente:* ${cliente.trim()}`,
-      cnpj ? `📋 *CNPJ:* ${cnpj}` : null,
-      '',
-      '*Produtos:*',
-      linhas,
-      '',
-      `💰 *Total: R$ ${total.toFixed(2).replace('.', ',')}*`,
-      obs.trim() ? `\n📝 *Obs:* ${obs.trim()}` : null,
-    ]
-
-    const msg = partes.filter(l => l !== null).join('\n')
-    window.open(`https://wa.me/${WA_NUMERO}?text=${encodeURIComponent(msg)}`, '_blank')
-    setPerguntaPDF(true)
-  }
-
-  const inputCls = 'w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:border-primary transition-colors bg-white'
-
-  /* ── Tela de conclusão ── */
-  if (concluido) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-5 text-center">
-        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
-          <i className="fas fa-check text-4xl text-green-600"></i>
-        </div>
-        <div>
-          <p className="text-xl font-bold text-text-dark mb-1">Pedido enviado!</p>
-          <p className="text-gray-400 text-sm">O WhatsApp foi aberto com o pedido formatado.</p>
-        </div>
-        <button onClick={limparFormulario}
-                className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-semibold hover:bg-dark-brown transition-colors cursor-pointer border-none">
-          <i className="fas fa-plus"></i> Criar novo pedido
-        </button>
-      </div>
-    )
-  }
-
-  /* ── Badge: imprimir pedido? ── */
-  if (perguntaPDF) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 gap-6">
-        <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-8 max-w-sm w-full text-center flex flex-col gap-5">
-          <div className="w-16 h-16 rounded-full bg-whatsapp/10 flex items-center justify-center mx-auto">
-            <i className="fab fa-whatsapp text-3xl text-whatsapp"></i>
-          </div>
-          <div>
-            <p className="text-lg font-bold text-text-dark mb-1">Pedido enviado pelo WhatsApp!</p>
-            <p className="text-sm text-gray-400">Deseja também imprimir o pedido em PDF?</p>
-          </div>
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={async () => {
-                setGerando(true)
-                try { gerarPedidoPDF({ cliente, cnpj, itens, total, obs }) }
-                finally { setGerando(false) }
-                setConcluido(true); setPerguntaPDF(false)
-              }}
-              disabled={gerando}
-              className="flex items-center justify-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-semibold hover:bg-dark-brown transition-colors cursor-pointer border-none disabled:opacity-60"
-            >
-              <i className={`fas ${gerando ? 'fa-spinner fa-spin' : 'fa-file-pdf'}`}></i>
-              {gerando ? 'Gerando PDF…' : 'Sim, imprimir PDF'}
-            </button>
-            <button
-              onClick={() => { setConcluido(true); setPerguntaPDF(false) }}
-              className="px-6 py-3 border-2 border-gray-200 rounded-xl text-sm font-semibold text-gray-500 hover:border-primary hover:text-primary transition-colors cursor-pointer bg-transparent"
-            >
-              Não, obrigado
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="max-w-2xl flex flex-col gap-5">
-
-      {/* Cliente + CNPJ */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col gap-4">
-        <h3 className="font-bold text-text-dark flex items-center gap-2">
-          <i className="fas fa-user text-primary"></i> Dados do Cliente
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block mb-1 text-sm font-semibold text-text-dark">Cliente *</label>
-            <input type="text" value={cliente} onChange={e => setCliente(e.target.value)}
-                   placeholder="Nome ou empresa" className={inputCls} />
-          </div>
-          <div>
-            <label className="block mb-1 text-sm font-semibold text-text-dark">CNPJ</label>
-            <input type="text" value={cnpj}
-                   onChange={e => setCnpj(formatCNPJ(e.target.value))}
-                   placeholder="00.000.000/0000-00" maxLength={18} className={inputCls} />
-          </div>
-        </div>
-      </div>
-
-      {/* Adicionar produto */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col gap-4">
-        <h3 className="font-bold text-text-dark flex items-center gap-2">
-          <i className="fas fa-box text-primary"></i> Produtos
-        </h3>
-
-        <div className="bg-gray-50 rounded-xl p-4 flex flex-col gap-3">
-          <p className="text-sm font-semibold text-gray-600">Adicionar produto ao pedido</p>
-          <select value={prodSel} onChange={e => handleSelectProduto(e.target.value)}
-                  className={inputCls}>
-            <option value="">Selecione um produto…</option>
-            {ativos.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.nome}
-                {p.precoAtacado != null
-                  ? ` — Atacado: R$ ${Number(p.precoAtacado).toFixed(2).replace('.', ',')}`
-                  : ` — Varejo: R$ ${Number(p.preco).toFixed(2).replace('.', ',')}`}
-              </option>
-            ))}
-          </select>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block mb-1 text-xs text-gray-500">Quantidade</label>
-              <input type="number" value={qtdSel} onChange={e => setQtdSel(e.target.value)}
-                     min="1" step="1" className={inputCls} />
-            </div>
-            <div>
-              <label className="block mb-1 text-xs text-gray-500">Preço unit. (R$)</label>
-              <input type="number" value={precoSel} onChange={e => setPrecoSel(e.target.value)}
-                     min="0" step="0.01" placeholder="0.00" className={inputCls} />
-            </div>
-            <div className="flex items-end col-span-2 sm:col-span-1">
-              <button type="button" onClick={adicionarItem}
-                      disabled={!prodSel || !qtdSel || precoSel === ''}
-                      className="w-full py-2.5 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-dark-brown transition-colors cursor-pointer border-none disabled:opacity-50 flex items-center justify-center gap-2">
-                <i className="fas fa-plus"></i> Adicionar
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Lista de itens */}
-        {itens.length > 0 && (
-          <div className="flex flex-col gap-2">
-            {itens.map((it, idx) => (
-              <div key={idx} className="flex items-center gap-3 border border-gray-100 rounded-xl p-3">
-                {it.imagem && (
-                  <img src={it.imagem} alt={it.nome}
-                       className="w-10 h-10 object-cover rounded-lg shrink-0"
-                       onError={e => { e.target.src = '/img/logocacto.svg' }} />
-                )}
-                <p className="flex-1 text-sm font-semibold text-text-dark min-w-0 truncate">{it.nome}</p>
-                <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                  <div className="text-center">
-                    <p className="text-[10px] text-gray-400 mb-1">Qtd</p>
-                    <input type="number" value={it.quantidade} min="1"
-                           onChange={e => atualizarItem(idx, 'quantidade', e.target.value)}
-                           className="w-14 px-1 py-1 border-2 border-gray-200 rounded-lg text-sm text-center focus:outline-none focus:border-primary" />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[10px] text-gray-400 mb-1">R$ unit.</p>
-                    <input type="number" value={it.precoUnitario} min="0" step="0.01"
-                           onChange={e => atualizarItem(idx, 'precoUnitario', e.target.value)}
-                           className="w-20 px-1 py-1 border-2 border-gray-200 rounded-lg text-sm text-center focus:outline-none focus:border-primary" />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[10px] text-gray-400 mb-1">Subtotal</p>
-                    <p className="text-sm font-bold text-primary">
-                      R$ {(it.quantidade * it.precoUnitario).toFixed(2).replace('.', ',')}
-                    </p>
-                  </div>
-                  <button type="button" onClick={() => removerItem(idx)}
-                          className="text-red-400 hover:text-red-600 transition-colors cursor-pointer bg-transparent border-none ml-1">
-                    <i className="fas fa-trash text-sm"></i>
-                  </button>
-                </div>
-              </div>
-            ))}
-
-            {/* Total */}
-            <div className="flex justify-end mt-1">
-              <div className="bg-orange-50 border border-orange-100 rounded-xl px-5 py-3 flex items-center gap-4">
-                <span className="text-text-light font-medium text-sm">Total</span>
-                <span className="text-primary font-bold text-xl">
-                  R$ {total.toFixed(2).replace('.', ',')}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Observações */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <label className="flex mb-2 text-sm font-semibold text-text-dark items-center gap-2">
-          <i className="fas fa-comment-alt text-primary"></i> Observações
-        </label>
-        <textarea value={obs} onChange={e => setObs(e.target.value)}
-                  rows={2} placeholder="Condições de entrega, prazo, etc."
-                  className={'w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:border-primary transition-colors resize-y'} />
-      </div>
-
-      {/* Ações */}
-      <div className="flex gap-3 flex-wrap">
-        <button
-          onClick={enviarWhatsApp}
-          disabled={!cliente.trim() || itens.length === 0}
-          className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-whatsapp text-white px-6 py-3.5 rounded-xl font-semibold text-base hover:bg-whatsapp-dark transition-colors cursor-pointer border-none disabled:opacity-50 shadow"
-        >
-          <i className="fab fa-whatsapp text-xl"></i> Enviar via WhatsApp
-        </button>
-        <button
-          onClick={async () => {
-            if (!cliente.trim() || itens.length === 0) return
-            setGerando(true)
-            try { gerarPedidoPDF({ cliente, cnpj, itens, total, obs }) }
-            finally { setGerando(false) }
-          }}
-          disabled={gerando || !cliente.trim() || itens.length === 0}
-          className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-primary text-white px-6 py-3.5 rounded-xl font-semibold text-base hover:bg-dark-brown transition-colors cursor-pointer border-none disabled:opacity-50 shadow"
-        >
-          <i className={`fas ${gerando ? 'fa-spinner fa-spin' : 'fa-file-pdf'} text-xl`}></i>
-          {gerando ? 'Gerando…' : 'Imprimir PDF'}
-        </button>
-        <button
-          onClick={limparFormulario}
-          className="flex items-center justify-center gap-2 px-5 py-3.5 border-2 border-gray-200 rounded-xl text-sm font-semibold text-gray-500 hover:border-primary hover:text-primary transition-colors cursor-pointer bg-transparent"
-        >
-          <i className="fas fa-trash-alt"></i> Limpar
-        </button>
-      </div>
-
-      {!cliente.trim() && itens.length > 0 && (
-        <p className="text-xs text-red-500 -mt-2">Preencha o nome do cliente para enviar ou imprimir.</p>
-      )}
-    </div>
-  )
-}
-
 /* ── Seção Bling (conexão com a API) ── */
 function SecaoBling({ showToast }) {
   const [status,   setStatus]   = useState(null)
@@ -1125,7 +843,7 @@ export default function Dashboard() {
 
   const navItems = [
     { id: 'catalogo', icon: 'fa-box',      label: 'Catálogo' },
-    { id: 'pedidos',  icon: 'fa-file-alt', label: 'Pedidos'  },
+    { id: 'pedidos',  icon: 'fa-cart-plus', label: 'Criar Pedido' },
     { id: 'clientes', icon: 'fa-users',    label: 'Clientes' },
     { id: 'site',     icon: 'fa-globe',    label: 'Site'     },
     { id: 'bling',    icon: 'fa-plug',     label: 'Bling'    },
@@ -1241,6 +959,9 @@ export default function Dashboard() {
                               ? <span className={badgeGreen}>Ativo</span>
                               : <span className={badgeRed}>Inativo</span>}
                             {visivelNoSite(p) && <span className={badgeBlue}><i className="fas fa-globe text-[10px]"></i>No site</span>}
+                            {p.blingProdutoId
+                              ? <span className={badgeGreen}><i className="fas fa-link text-[10px] mr-1"></i>Bling</span>
+                              : <span className={badgeRed}><i className="fas fa-unlink text-[10px] mr-1"></i>Sem Bling</span>}
                           </div>
                         </div>
                         <div className="p-4 flex flex-col gap-3 flex-1">
@@ -1259,6 +980,12 @@ export default function Dashboard() {
                               <div>
                                 <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">Atacado (ADM)</p>
                                 <p className="text-green-700 font-bold text-sm">R$ {precoAt}</p>
+                              </div>
+                            )}
+                            {p.qtdFardo > 1 && (
+                              <div>
+                                <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">Fardo</p>
+                                <p className="text-text-dark font-bold text-sm">{p.qtdFardo} un</p>
                               </div>
                             )}
                           </div>
@@ -1291,7 +1018,7 @@ export default function Dashboard() {
             <>
               <div className="mb-5">
                 <h2 className="text-xl font-bold text-text-dark">Criar Pedido</h2>
-                <p className="text-sm text-gray-400 mt-0.5">Monte o pedido e envie direto pelo WhatsApp</p>
+                <p className="text-sm text-gray-400 mt-0.5">Monte o pedido: salve como orçamento ou crie direto no Bling</p>
               </div>
               {produtos.length === 0 && !loading
                 ? (
@@ -1304,7 +1031,7 @@ export default function Dashboard() {
                     </button>
                   </div>
                 )
-                : <SecaoPedido produtos={produtos} />
+                : <SecaoCriarPedido produtos={produtos} showToast={showToast} />
               }
             </>
           )}

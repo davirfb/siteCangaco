@@ -292,7 +292,7 @@ export async function gerarCatalogoPDF(produtos) {
 }
 
 /* ── PDF de Pedido ── */
-export function gerarPedidoPDF({ cliente, cnpj, itens, total, obs }) {
+export function gerarPedidoPDF({ cliente, cnpj, itens, total, obs, titulo = 'PEDIDO', numero }) {
   const doc  = new jsPDF({ unit: 'mm', format: 'a4' })
   const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
 
@@ -303,7 +303,7 @@ export function gerarPedidoPDF({ cliente, cnpj, itens, total, obs }) {
   doc.setTextColor(255, 255, 255)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(24)
-  doc.text('PEDIDO', MARGIN, 20)
+  doc.text(numero ? `${titulo} Nº ${numero}` : titulo, MARGIN, 20)
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(11)
@@ -432,7 +432,8 @@ export function gerarPedidoPDF({ cliente, cnpj, itens, total, obs }) {
   // ── Rodapé ──
   rodape(doc)
 
-  const nomeArq = `pedido-${(cliente || 'cliente').replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`
+  const tituloArq = titulo === 'ORÇAMENTO' ? 'orcamento' : titulo.toLowerCase()
+  const nomeArq = `${tituloArq}${numero ? '-' + numero : ''}-${(cliente || 'cliente').replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`
   doc.save(nomeArq)
 }
 

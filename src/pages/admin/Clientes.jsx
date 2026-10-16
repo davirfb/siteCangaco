@@ -66,6 +66,7 @@ function paraForm(c) {
     nome:            c?.nome ?? '',
     apelido:         c?.apelido ?? '',
     grupoId:         c?.grupoId ?? '',
+    tabelaPreco:     c?.tabelaPreco ?? '',
     destaques:       c?.destaques ?? [],
     fantasia:        c?.fantasia ?? '',
     tipo,
@@ -87,7 +88,7 @@ function paraForm(c) {
 function paraLista(c) {
   return {
     id: String(c.id), nome: c.nome, apelido: c.apelido ?? '', fantasia: c.fantasia ?? '',
-    grupoId: c.grupoId ?? null, destaques: c.destaques ?? [],
+    grupoId: c.grupoId ?? null, destaques: c.destaques ?? [], tabelaPreco: c.tabelaPreco ?? null,
     codigo: c.codigo ?? '', situacao: c.situacao ?? 'A', tipo: c.tipo,
     numeroDocumento: soDigitos(c.numeroDocumento), telefone: c.telefone ?? '', celular: c.celular ?? '',
     email: c.email ?? '', municipio: c.endereco?.geral?.municipio ?? '', uf: c.endereco?.geral?.uf ?? '',
@@ -168,6 +169,17 @@ function FormCliente({ id, inicial, grupos, onClose, onSaved, showToast }) {
           <input value={form.apelido} onChange={e => set('apelido', e.target.value)}
                  placeholder="Ex: Mercado do João" className={inputCls} />
         </div>
+        <div>
+          <label className={labelCls}>Tabela de preço <span className="text-[11px] font-normal text-gray-400">padrão nos pedidos</span></label>
+          <select value={form.tabelaPreco || ''} onChange={e => set('tabelaPreco', e.target.value)} className={inputCls}>
+            <option value="">Não definida</option>
+            <option value="varejo">Varejo</option>
+            <option value="atacado">Atacado</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Tipo de pessoa</label>
           <select value={form.tipo}
@@ -330,7 +342,7 @@ function FormCliente({ id, inicial, grupos, onClose, onSaved, showToast }) {
 }
 
 /* ── Modal do cliente (carrega a ficha completa do Bling) ── */
-function ModalCliente({ id, grupos, onClose, onSaved, showToast }) {
+export function ModalCliente({ id, grupos, onClose, onSaved, showToast }) {
   const [inicial, setInicial] = useState(id === 'novo' ? paraForm(null) : null)
   const [erro, setErro] = useState('')
 
