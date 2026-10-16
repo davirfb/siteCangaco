@@ -2,6 +2,8 @@ import { auth } from './firebase.js'
 
 // Chama as funções do servidor (/api/...) enviando o token do admin logado.
 export async function api(caminho, { method = 'GET', body } = {}) {
+  // Ao recarregar a página o Firebase ainda está restaurando a sessão: espera terminar
+  await auth.authStateReady()
   const user = auth.currentUser
   if (!user) throw new Error('Faça login novamente.')
   const token = await user.getIdToken()
