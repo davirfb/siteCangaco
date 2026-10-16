@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { gerarCatalogoPDF, gerarPedidoPDF } from '../../utils/gerarPDF.js'
 import { visivelNoSite } from '../../utils/produtos.js'
+import { useRascunho, limparRascunhos } from '../../hooks/useRascunho.js'
 import { auth, db } from '../../lib/firebase.js'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import {
@@ -124,8 +125,9 @@ function normalizarFaixas(atacado) {
 
 /* ── Modal Produto no Site (preço varejo + faixas) ── */
 function ModalProdutoSite({ produto, onClose, onSaved }) {
-  const [preco,   setPreco]   = useState(produto.preco ?? '')
-  const [atacado, setAtacado] = useState(produto.atacado?.length ? produto.atacado : [])
+  const r = campo => `rascunho:site:${produto.id}:${campo}`
+  const [preco,   setPreco]   = useRascunho(r('preco'), produto.preco ?? '')
+  const [atacado, setAtacado] = useRascunho(r('atacado'), produto.atacado?.length ? produto.atacado : [])
   const [erro,    setErro]    = useState('')
   const [saving,  setSaving]  = useState(false)
 
@@ -218,13 +220,14 @@ function ModalProdutoSite({ produto, onClose, onSaved }) {
 
 /* ── Modal Produto (Catálogo) ── */
 function ModalProduto({ produto, onClose, onSaved }) {
-  const [nome,         setNome]        = useState(produto?.nome         ?? '')
-  const [preco,        setPreco]       = useState(produto?.preco        ?? '')
-  const [precoAtacado, setPrecoAtacado]= useState(produto?.precoAtacado ?? '')
-  const [descricao,    setDescricao]   = useState(produto?.descricao    ?? '')
-  const [destaque,     setDestaque]    = useState(produto?.destaque     ?? false)
-  const [ativo,        setAtivo]       = useState(produto?.ativo !== false)
-  const [atacado,      setAtacado]     = useState(
+  const r = campo => `rascunho:produto:${produto?.id ?? 'novo'}:${campo}`
+  const [nome,         setNome]        = useRascunho(r('nome'),         produto?.nome         ?? '')
+  const [preco,        setPreco]       = useRascunho(r('preco'),        produto?.preco        ?? '')
+  const [precoAtacado, setPrecoAtacado]= useRascunho(r('precoAtacado'), produto?.precoAtacado ?? '')
+  const [descricao,    setDescricao]   = useRascunho(r('descricao'),    produto?.descricao    ?? '')
+  const [destaque,     setDestaque]    = useRascunho(r('destaque'),     produto?.destaque     ?? false)
+  const [ativo,        setAtivo]       = useRascunho(r('ativo'),        produto?.ativo !== false)
+  const [atacado,      setAtacado]     = useRascunho(r('atacado'),
     produto?.atacado?.length ? produto.atacado : []
   )
   const [previewSrc, setPreviewSrc] = useState(produto?.imagem || null)
@@ -416,9 +419,10 @@ function ModalProduto({ produto, onClose, onSaved }) {
 
 /* ── Modal Slide ── */
 function ModalSlide({ slide, onClose, onSaved }) {
-  const [titulo,     setTitulo]    = useState(slide?.titulo  ?? '')
-  const [ordem,      setOrdem]     = useState(slide?.ordem   ?? 0)
-  const [ativo,      setAtivo]     = useState(slide?.ativo !== false)
+  const r = campo => `rascunho:slide:${slide?.id ?? 'novo'}:${campo}`
+  const [titulo,     setTitulo]    = useRascunho(r('titulo'), slide?.titulo  ?? '')
+  const [ordem,      setOrdem]     = useRascunho(r('ordem'),  slide?.ordem   ?? 0)
+  const [ativo,      setAtivo]     = useRascunho(r('ativo'),  slide?.ativo !== false)
   const [previewSrc, setPreviewSrc]= useState(slide?.imagem || null)
   const [dragOver,   setDragOver]  = useState(false)
   const [uploading,  setUploading] = useState(false)
@@ -596,16 +600,16 @@ function ModalConfirmar({ titulo, onConfirm, onClose }) {
 
 /* ── Seção Criar Pedido (sem banco de dados) ── */
 function SecaoPedido({ produtos }) {
-  const [cliente,    setCliente]    = useState('')
-  const [cnpj,       setCnpj]       = useState('')
-  const [obs,        setObs]        = useState('')
-  const [itens,      setItens]      = useState([])
-  const [prodSel,    setProdSel]    = useState('')
-  const [qtdSel,     setQtdSel]     = useState(1)
-  const [precoSel,   setPrecoSel]   = useState('')
+  const [cliente,    setCliente]    = useRascunho('rascunho:pedido:cliente', '')
+  const [cnpj,       setCnpj]       = useRascunho('rascunho:pedido:cnpj', '')
+  const [obs,        setObs]        = useRascunho('rascunho:pedido:obs', '')
+  const [itens,      setItens]      = useRascunho('rascunho:pedido:itens', [])
+  const [prodSel,    setProdSel]    = useRascunho('rascunho:pedido:prodSel', '')
+  const [qtdSel,     setQtdSel]     = useRascunho('rascunho:pedido:qtdSel', 1)
+  const [precoSel,   setPrecoSel]   = useRascunho('rascunho:pedido:precoSel', '')
   const [gerando,    setGerando]    = useState(false)
-  const [concluido,  setConcluido]  = useState(false)
-  const [perguntaPDF, setPerguntaPDF] = useState(false)
+  const [concluido,  setConcluido]  = useRascunho('rascunho:pedido:concluido', false)
+  const [perguntaPDF, setPerguntaPDF] = useRascunho('rascunho:pedido:perguntaPDF', false)
 
   const ativos = produtos.filter(p => p.ativo !== false)
   const total  = itens.reduce((acc, it) => acc + it.quantidade * it.precoUnitario, 0)
@@ -895,16 +899,16 @@ function SecaoPedido({ produtos }) {
 
 /* ── Dashboard ── */
 export default function Dashboard() {
-  const [activeSection, setActiveSection] = useState('catalogo')
+  const [activeSection, setActiveSection] = useRascunho('admin:secao', 'catalogo')
   const [produtos,   setProdutos]   = useState([])
   const [slides,     setSlides]     = useState([])
   const [gerandoPDF, setGerandoPDF] = useState(false)
   const [loading,    setLoading]    = useState(true)
   const [userEmail,  setUserEmail]  = useState('')
 
-  const [modalProduto,   setModalProduto]   = useState(null)
-  const [modalSlide,     setModalSlide]     = useState(null)
-  const [modalProdSite,  setModalProdSite]  = useState(null)
+  const [modalProduto,   setModalProduto]   = useRascunho('admin:modalProduto', null)
+  const [modalSlide,     setModalSlide]     = useRascunho('admin:modalSlide', null)
+  const [modalProdSite,  setModalProdSite]  = useRascunho('admin:modalProdSite', null)
   const [modalConfirmar, setModalConfirmar] = useState(null)
 
   const [toast, setToast] = useState({ visible: false, msg: '', tipo: 'success' })
@@ -983,6 +987,11 @@ export default function Dashboard() {
   const badgeGreen = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800'
   const badgeRed   = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700'
   const badgeBlue  = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700'
+
+  // Modais guardam só o id (ou 'novo'), para reabrirem ao recarregar a página
+  const produtoEditando = produtos.find(p => p.id === modalProduto)
+  const produtoNoSite   = produtos.find(p => p.id === modalProdSite)
+  const slideEditando   = slides.find(s => s.id === modalSlide)
 
   async function toggleNoSite(p) {
     const exibirNoSite = !visivelNoSite(p)
@@ -1064,7 +1073,7 @@ export default function Dashboard() {
                     <i className={`fas ${gerandoPDF ? 'fa-spinner fa-spin' : 'fa-file-pdf'}`}></i>
                     <span className="hidden sm:inline">{gerandoPDF ? 'Gerando…' : 'Catálogo PDF'}</span>
                   </button>
-                  <button onClick={() => setModalProduto({})}
+                  <button onClick={() => setModalProduto('novo')}
                           className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-dark-brown transition-colors cursor-pointer border-none">
                     <i className="fas fa-plus"></i>
                     <span className="hidden sm:inline">Novo Produto</span>
@@ -1084,7 +1093,7 @@ export default function Dashboard() {
                 <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-4">
                   <i className="fas fa-box-open text-5xl"></i>
                   <p>Nenhum produto cadastrado.</p>
-                  <button onClick={() => setModalProduto({})}
+                  <button onClick={() => setModalProduto('novo')}
                           className="bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-dark-brown transition-colors cursor-pointer border-none">
                     Adicionar primeiro produto
                   </button>
@@ -1136,7 +1145,7 @@ export default function Dashboard() {
                             </p>
                           )}
                           <div className="flex gap-2 mt-auto pt-3 border-t border-gray-50">
-                            <button onClick={() => setModalProduto(p)}
+                            <button onClick={() => setModalProduto(p.id)}
                                     className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 text-sm font-semibold transition-colors cursor-pointer border-none">
                               <i className="fas fa-edit"></i> Editar
                             </button>
@@ -1222,7 +1231,7 @@ export default function Dashboard() {
                                 : 'Sem faixas de atacado'}
                           </p>
                         </div>
-                        <button onClick={() => setModalProdSite(p)} disabled={inativo}
+                        <button onClick={() => setModalProdSite(p.id)} disabled={inativo}
                                 title="Editar preço e faixas"
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-semibold transition-colors cursor-pointer border-none disabled:cursor-not-allowed">
                           <i className="fas fa-edit"></i>
@@ -1247,7 +1256,7 @@ export default function Dashboard() {
                   <h3 className="text-lg font-bold text-text-dark">Slider</h3>
                   <p className="text-sm text-gray-400 mt-0.5">Imagens exibidas na seção "Sobre Nós" da página inicial</p>
                 </div>
-                <button onClick={() => setModalSlide({})}
+                <button onClick={() => setModalSlide('novo')}
                         className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-dark-brown transition-colors cursor-pointer border-none">
                   <i className="fas fa-plus"></i> Nova Imagem
                 </button>
@@ -1257,7 +1266,7 @@ export default function Dashboard() {
                 <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-4">
                   <i className="fas fa-images text-5xl"></i>
                   <p>Nenhuma imagem no slider.</p>
-                  <button onClick={() => setModalSlide({})}
+                  <button onClick={() => setModalSlide('novo')}
                           className="bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-dark-brown transition-colors cursor-pointer border-none">
                     Adicionar primeira imagem
                   </button>
@@ -1282,7 +1291,7 @@ export default function Dashboard() {
                         </p>
                         <p className="text-xs text-gray-400 mb-3">Ordem: {s.ordem ?? 0}</p>
                         <div className="flex gap-2">
-                          <button onClick={() => setModalSlide(s)}
+                          <button onClick={() => setModalSlide(s.id)}
                                   className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-sm font-semibold transition-colors cursor-pointer border-none">
                             <i className="fas fa-edit text-xs"></i> Editar
                           </button>
@@ -1318,27 +1327,27 @@ export default function Dashboard() {
       </nav>
 
       {/* Modais */}
-      {modalProduto !== null && (
+      {(modalProduto === 'novo' || produtoEditando) && (
         <ModalProduto
-          produto={modalProduto?.id ? modalProduto : null}
-          onClose={() => setModalProduto(null)}
+          produto={produtoEditando ?? null}
+          onClose={() => { limparRascunhos('rascunho:produto:'); setModalProduto(null) }}
           onSaved={handleSavedProduto}
         />
       )}
-      {modalProdSite && (
+      {produtoNoSite && (
         <ModalProdutoSite
-          produto={modalProdSite}
-          onClose={() => setModalProdSite(null)}
+          produto={produtoNoSite}
+          onClose={() => { limparRascunhos('rascunho:site:'); setModalProdSite(null) }}
           onSaved={p => {
             setProdutos(prev => prev.map(x => x.id === p.id ? p : x))
             showToast('Produto atualizado!')
           }}
         />
       )}
-      {modalSlide !== null && (
+      {(modalSlide === 'novo' || slideEditando) && (
         <ModalSlide
-          slide={modalSlide?.id ? modalSlide : null}
-          onClose={() => setModalSlide(null)}
+          slide={slideEditando ?? null}
+          onClose={() => { limparRascunhos('rascunho:slide:'); setModalSlide(null) }}
           onSaved={handleSavedSlide}
         />
       )}
