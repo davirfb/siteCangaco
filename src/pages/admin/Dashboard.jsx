@@ -4,6 +4,7 @@ import { gerarCatalogoPDF, gerarPedidoPDF } from '../../utils/gerarPDF.js'
 import { visivelNoSite } from '../../utils/produtos.js'
 import { useRascunho, limparRascunhos } from '../../hooks/useRascunho.js'
 import { api } from '../../lib/api.js'
+import SecaoClientes from './Clientes.jsx'
 import { auth, db } from '../../lib/firebase.js'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import {
@@ -1125,6 +1126,7 @@ export default function Dashboard() {
   const navItems = [
     { id: 'catalogo', icon: 'fa-box',      label: 'Catálogo' },
     { id: 'pedidos',  icon: 'fa-file-alt', label: 'Pedidos'  },
+    { id: 'clientes', icon: 'fa-users',    label: 'Clientes' },
     { id: 'site',     icon: 'fa-globe',    label: 'Site'     },
     { id: 'bling',    icon: 'fa-plug',     label: 'Bling'    },
   ]
@@ -1306,6 +1308,9 @@ export default function Dashboard() {
               }
             </>
           )}
+
+          {/* ── Clientes ── */}
+          {activeSection === 'clientes' && <SecaoClientes showToast={showToast} />}
 
           {/* ── Bling ── */}
           {activeSection === 'bling' && <SecaoBling showToast={showToast} />}
