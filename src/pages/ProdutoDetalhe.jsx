@@ -6,6 +6,7 @@ import Navbar    from '../components/Navbar.jsx'
 import Footer    from '../components/Footer.jsx'
 import BackToTop from '../components/BackToTop.jsx'
 import { useCart } from '../components/context/CartContext.jsx'
+import { visivelNoSite } from '../utils/produtos.js'
 
 const WHATSAPP = '5561993779722'
 
@@ -23,8 +24,9 @@ export default function ProdutoDetalhe() {
     async function load() {
       try {
         const snap = await getDoc(doc(db, 'produtos', id))
-        if (!snap.exists()) { navigate('/produtos', { replace: true }); return }
-        setProduto({ id: snap.id, ...snap.data() })
+        const p = snap.exists() ? { id: snap.id, ...snap.data() } : null
+        if (!p || !visivelNoSite(p)) { navigate('/produtos', { replace: true }); return }
+        setProduto(p)
       } catch {
         navigate('/produtos', { replace: true })
       } finally {

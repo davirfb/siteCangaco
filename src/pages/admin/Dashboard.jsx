@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { gerarCatalogoPDF, gerarPedidoPDF } from '../../utils/gerarPDF.js'
+import { visivelNoSite } from '../../utils/produtos.js'
 import { auth, db } from '../../lib/firebase.js'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import {
@@ -73,6 +74,149 @@ function Toast({ msg, tipo, visible }) {
 }
 
 /* ── Modal Produto ── */
+/* ── Editor de faixas de atacado ── */
+function FaixasEditor({ atacado, setAtacado, preco, inputCls }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {atacado.map((tier, i) => (
+        <div key={i} className="flex gap-2 items-end">
+          <div className="flex-1">
+            {i === 0 && <label className="block mb-1 text-xs font-semibold text-gray-500">Qtd. mínima</label>}
+            <input type="number" min="1" step="1" placeholder="Ex: 150"
+              value={tier.qtdMinima}
+              onChange={e => setAtacado(prev => prev.map((t, j) => j === i ? { ...t, qtdMinima: e.target.value } : t))}
+              className={inputCls} />
+          </div>
+          <div className="flex-1">
+            {i === 0 && <label className="block mb-1 text-xs font-semibold text-gray-500">Preço unit. (R$)</label>}
+            <input type="number" min="0" step="0.01" placeholder="Ex: 2.90"
+              value={tier.preco}
+              onChange={e => setAtacado(prev => prev.map((t, j) => j === i ? { ...t, preco: e.target.value } : t))}
+              className={inputCls} />
+          </div>
+          {preco && tier.preco && (
+            <div className="pb-2.5 text-xs font-semibold text-green-600 whitespace-nowrap">
+              {Math.round((1 - tier.preco / preco) * 100)}% off
+            </div>
+          )}
+          <button type="button"
+                  onClick={() => setAtacado(prev => prev.filter((_, j) => j !== i))}
+                  className="pb-2.5 text-red-400 hover:text-red-600 transition-colors cursor-pointer bg-transparent border-none">
+            <i className="fas fa-trash text-sm"></i>
+          </button>
+        </div>
+      ))}
+      <button type="button"
+              onClick={() => setAtacado(prev => [...prev, { qtdMinima: '', preco: '' }])}
+              className="flex items-center gap-2 text-sm text-primary hover:text-dark-brown font-semibold cursor-pointer bg-transparent border-none w-fit">
+        <i className="fas fa-plus"></i> Adicionar faixa
+      </button>
+    </div>
+  )
+}
+
+function normalizarFaixas(atacado) {
+  return atacado
+    .filter(t => t.qtdMinima && t.preco)
+    .map(t => ({ qtdMinima: parseInt(t.qtdMinima), preco: parseFloat(t.preco) }))
+    .sort((a, b) => a.qtdMinima - b.qtdMinima)
+}
+
+/* ── Modal Produto no Site (preço varejo + faixas) ── */
+function ModalProdutoSite({ produto, onClose, onSaved }) {
+  const [preco,   setPreco]   = useState(produto.preco ?? '')
+  const [atacado, setAtacado] = useState(produto.atacado?.length ? produto.atacado : [])
+  const [erro,    setErro]    = useState('')
+  const [saving,  setSaving]  = useState(false)
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
+  }, [onClose])
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setErro('')
+    setSaving(true)
+    try {
+      const dados = {
+        preco:   parseFloat(preco),
+        atacado: normalizarFaixas(atacado),
+        atualizadoEm: serverTimestamp(),
+        ...(parseFloat(preco) !== Number(produto.preco) && { precoAtualizadoEm: serverTimestamp() }),
+      }
+      await updateDoc(doc(db, 'produtos', produto.id), dados)
+      onSaved({ ...produto, ...dados })
+      onClose()
+    } catch (err) {
+      console.error(err)
+      setErro('Erro ao salvar: ' + err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputCls = 'w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:border-primary transition-colors'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60"
+         onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-lg max-h-[95vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="text-lg font-bold text-text-dark">Produto no Site</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-primary transition-colors cursor-pointer bg-transparent border-none p-1">
+            <i className="fas fa-times text-xl"></i>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 flex flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <img src={produto.imagem || '/img/logocacto.svg'} alt={produto.nome}
+                 className="w-16 h-16 rounded-lg object-cover shrink-0"
+                 onError={e => { e.target.src = '/img/logocacto.svg' }} />
+            <p className="font-bold text-text-dark text-sm">{produto.nome}</p>
+          </div>
+
+          <div>
+            <label className="block mb-1 text-sm font-semibold text-text-dark">Preço Varejo (R$) *</label>
+            <input type="number" value={preco} onChange={e => setPreco(e.target.value)}
+                   required step="0.01" min="0" placeholder="25.90" className={inputCls} />
+          </div>
+
+          <div className="relative flex items-center my-1">
+            <div className="flex-1 border-t border-gray-200"></div>
+            <span className="px-3 text-xs text-gray-400 bg-white">Faixas de Atacado (opcional)</span>
+            <div className="flex-1 border-t border-gray-200"></div>
+          </div>
+
+          <FaixasEditor atacado={atacado} setAtacado={setAtacado} preco={preco} inputCls={inputCls} />
+
+          <p className="text-xs text-gray-400">Essas alterações também valem no Catálogo.</p>
+
+          {erro && (
+            <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm" role="alert">{erro}</div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose}
+                    className="px-5 py-2.5 border-2 border-gray-300 rounded-lg text-sm font-semibold text-text-dark hover:border-primary hover:text-primary transition-colors cursor-pointer">
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving}
+                    className="px-6 py-2.5 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-dark-brown transition-colors disabled:opacity-60 cursor-pointer flex items-center gap-2">
+              <i className="fas fa-save"></i>
+              {saving ? 'Salvando…' : 'Salvar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/* ── Modal Produto (Catálogo) ── */
 function ModalProduto({ produto, onClose, onSaved }) {
   const [nome,         setNome]        = useState(produto?.nome         ?? '')
   const [preco,        setPreco]       = useState(produto?.preco        ?? '')
@@ -127,10 +271,7 @@ function ModalProduto({ produto, onClose, onSaved }) {
         imagem:       imagemUrl,
         destaque,
         ativo,
-        atacado: atacado
-          .filter(t => t.qtdMinima && t.preco)
-          .map(t => ({ qtdMinima: parseInt(t.qtdMinima), preco: parseFloat(t.preco) }))
-          .sort((a, b) => a.qtdMinima - b.qtdMinima),
+        atacado: normalizarFaixas(atacado),
         atualizadoEm: serverTimestamp(),
         ...((!produto?.id || parseFloat(preco) !== Number(produto?.preco)) && {
           precoAtualizadoEm: serverTimestamp(),
@@ -142,6 +283,7 @@ function ModalProduto({ produto, onClose, onSaved }) {
         onSaved({ ...produto, ...dados })
       } else {
         dados.criadoEm = serverTimestamp()
+        dados.exibirNoSite = false
         const ref = await addDoc(collection(db, 'produtos'), dados)
         onSaved({ id: ref.id, ...dados, criadoEm: new Date() })
       }
@@ -245,45 +387,11 @@ function ModalProduto({ produto, onClose, onSaved }) {
 
           <div className="relative flex items-center my-1">
             <div className="flex-1 border-t border-gray-200"></div>
-            <span className="px-3 text-xs text-gray-400 bg-white">Faixas de Atacado no Site (opcional)</span>
+            <span className="px-3 text-xs text-gray-400 bg-white">Faixas de Atacado (opcional)</span>
             <div className="flex-1 border-t border-gray-200"></div>
           </div>
 
-          <div className="flex flex-col gap-2">
-            {atacado.map((tier, i) => (
-              <div key={i} className="flex gap-2 items-end">
-                <div className="flex-1">
-                  {i === 0 && <label className="block mb-1 text-xs font-semibold text-gray-500">Qtd. mínima</label>}
-                  <input type="number" min="1" step="1" placeholder="Ex: 150"
-                    value={tier.qtdMinima}
-                    onChange={e => setAtacado(prev => prev.map((t, j) => j === i ? { ...t, qtdMinima: e.target.value } : t))}
-                    className={inputCls} />
-                </div>
-                <div className="flex-1">
-                  {i === 0 && <label className="block mb-1 text-xs font-semibold text-gray-500">Preço unit. (R$)</label>}
-                  <input type="number" min="0" step="0.01" placeholder="Ex: 2.90"
-                    value={tier.preco}
-                    onChange={e => setAtacado(prev => prev.map((t, j) => j === i ? { ...t, preco: e.target.value } : t))}
-                    className={inputCls} />
-                </div>
-                {preco && tier.preco && (
-                  <div className="pb-2.5 text-xs font-semibold text-green-600 whitespace-nowrap">
-                    {Math.round((1 - tier.preco / preco) * 100)}% off
-                  </div>
-                )}
-                <button type="button"
-                        onClick={() => setAtacado(prev => prev.filter((_, j) => j !== i))}
-                        className="pb-2.5 text-red-400 hover:text-red-600 transition-colors cursor-pointer bg-transparent border-none">
-                  <i className="fas fa-trash text-sm"></i>
-                </button>
-              </div>
-            ))}
-            <button type="button"
-                    onClick={() => setAtacado(prev => [...prev, { qtdMinima: '', preco: '' }])}
-                    className="flex items-center gap-2 text-sm text-primary hover:text-dark-brown font-semibold cursor-pointer bg-transparent border-none w-fit">
-              <i className="fas fa-plus"></i> Adicionar faixa
-            </button>
-          </div>
+          <FaixasEditor atacado={atacado} setAtacado={setAtacado} preco={preco} inputCls={inputCls} />
 
           {erro && (
             <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm" role="alert">{erro}</div>
@@ -787,7 +895,7 @@ function SecaoPedido({ produtos }) {
 
 /* ── Dashboard ── */
 export default function Dashboard() {
-  const [activeSection, setActiveSection] = useState('produtos')
+  const [activeSection, setActiveSection] = useState('catalogo')
   const [produtos,   setProdutos]   = useState([])
   const [slides,     setSlides]     = useState([])
   const [gerandoPDF, setGerandoPDF] = useState(false)
@@ -796,6 +904,7 @@ export default function Dashboard() {
 
   const [modalProduto,   setModalProduto]   = useState(null)
   const [modalSlide,     setModalSlide]     = useState(null)
+  const [modalProdSite,  setModalProdSite]  = useState(null)
   const [modalConfirmar, setModalConfirmar] = useState(null)
 
   const [toast, setToast] = useState({ visible: false, msg: '', tipo: 'success' })
@@ -873,11 +982,21 @@ export default function Dashboard() {
   const badgeGold  = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800'
   const badgeGreen = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800'
   const badgeRed   = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700'
+  const badgeBlue  = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700'
+
+  async function toggleNoSite(p) {
+    const exibirNoSite = !visivelNoSite(p)
+    try {
+      await updateDoc(doc(db, 'produtos', p.id), { exibirNoSite })
+      setProdutos(prev => prev.map(x => x.id === p.id ? { ...x, exibirNoSite } : x))
+      showToast(exibirNoSite ? 'Produto exibido no site.' : 'Produto removido do site.')
+    } catch { showToast('Erro ao atualizar o site.', 'error') }
+  }
 
   const navItems = [
-    { id: 'produtos', icon: 'fa-box',      label: 'Produtos' },
+    { id: 'catalogo', icon: 'fa-box',      label: 'Catálogo' },
     { id: 'pedidos',  icon: 'fa-file-alt', label: 'Pedidos'  },
-    { id: 'slider',   icon: 'fa-images',   label: 'Slider'   },
+    { id: 'site',     icon: 'fa-globe',    label: 'Site'     },
   ]
 
   function sair() { signOut(auth).then(() => navigate('/admin', { replace: true })) }
@@ -927,11 +1046,11 @@ export default function Dashboard() {
         {/* Main */}
         <main className="flex-1 p-4 md:p-6 min-w-0 pb-24 md:pb-6">
 
-          {/* ── Produtos ── */}
-          {activeSection === 'produtos' && (
+          {/* ── Catálogo ── */}
+          {activeSection === 'catalogo' && (
             <>
               <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
-                <h2 className="text-xl font-bold text-text-dark">Produtos</h2>
+                <h2 className="text-xl font-bold text-text-dark">Catálogo</h2>
                 <div className="flex gap-2">
                   <button
                     onClick={async () => {
@@ -989,6 +1108,7 @@ export default function Dashboard() {
                             {p.ativo !== false
                               ? <span className={badgeGreen}>Ativo</span>
                               : <span className={badgeRed}>Inativo</span>}
+                            {visivelNoSite(p) && <span className={badgeBlue}><i className="fas fa-globe text-[10px]"></i>No site</span>}
                           </div>
                         </div>
                         <div className="p-4 flex flex-col gap-3 flex-1">
@@ -1046,9 +1166,9 @@ export default function Dashboard() {
                   <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-3">
                     <i className="fas fa-box-open text-5xl"></i>
                     <p>Cadastre produtos antes de criar um pedido.</p>
-                    <button onClick={() => setActiveSection('produtos')}
+                    <button onClick={() => setActiveSection('catalogo')}
                             className="bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-dark-brown transition-colors cursor-pointer border-none">
-                      Ir para Produtos
+                      Ir para Catálogo
                     </button>
                   </div>
                 )
@@ -1057,12 +1177,74 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* ── Slider ── */}
-          {activeSection === 'slider' && (
+          {/* ── Site ── */}
+          {activeSection === 'site' && (
             <>
+              <div className="mb-5">
+                <h2 className="text-xl font-bold text-text-dark">Site</h2>
+                <p className="text-sm text-gray-400 mt-0.5">Configurações do site público</p>
+              </div>
+
+              {/* Produtos no site */}
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-text-dark">Produtos no Site</h3>
+                <p className="text-sm text-gray-400 mt-0.5">
+                  Escolha quais produtos do Catálogo aparecem no site ({produtos.filter(visivelNoSite).length} de {produtos.length})
+                </p>
+              </div>
+
+              {!loading && produtos.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-3">
+                  <i className="fas fa-box-open text-4xl"></i>
+                  <p>Cadastre produtos no Catálogo primeiro.</p>
+                </div>
+              )}
+
+              {produtos.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100 mb-10">
+                  {produtos.map(p => {
+                    const inativo  = p.ativo === false
+                    const noSite   = visivelNoSite(p)
+                    const precoVar = Number(p.preco).toFixed(2).replace('.', ',')
+                    return (
+                      <div key={p.id} className={`flex items-center gap-3 p-3 sm:p-4 ${inativo ? 'opacity-50' : ''}`}>
+                        <img src={p.imagem || '/img/logocacto.svg'} alt={p.nome}
+                             className="w-14 h-14 rounded-lg object-cover shrink-0"
+                             onError={e => { e.target.src = '/img/logocacto.svg' }} />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-text-dark text-sm truncate">{p.nome}</p>
+                          <p className="text-primary font-bold text-sm">R$ {precoVar}</p>
+                          <p className="text-xs text-gray-400">
+                            {inativo
+                              ? 'Inativo no Catálogo'
+                              : p.atacado?.length > 0
+                                ? `${p.atacado.length} faixa${p.atacado.length > 1 ? 's' : ''} de atacado`
+                                : 'Sem faixas de atacado'}
+                          </p>
+                        </div>
+                        <button onClick={() => setModalProdSite(p)} disabled={inativo}
+                                title="Editar preço e faixas"
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-semibold transition-colors cursor-pointer border-none disabled:cursor-not-allowed">
+                          <i className="fas fa-edit"></i>
+                          <span className="hidden sm:inline">Preço e faixas</span>
+                        </button>
+                        <label className={`flex items-center gap-2 select-none ${inativo ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                               title={inativo ? 'Ative o produto no Catálogo para exibir no site' : ''}>
+                          <input type="checkbox" checked={noSite} disabled={inativo}
+                                 onChange={() => toggleNoSite(p)} className="sr-only" />
+                          <span className="toggle-switch"></span>
+                          <span className="text-xs text-text-dark hidden sm:inline w-14">{noSite ? 'No site' : 'Oculto'}</span>
+                        </label>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Slider */}
               <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
                 <div>
-                  <h2 className="text-xl font-bold text-text-dark">Slider</h2>
+                  <h3 className="text-lg font-bold text-text-dark">Slider</h3>
                   <p className="text-sm text-gray-400 mt-0.5">Imagens exibidas na seção "Sobre Nós" da página inicial</p>
                 </div>
                 <button onClick={() => setModalSlide({})}
@@ -1141,6 +1323,16 @@ export default function Dashboard() {
           produto={modalProduto?.id ? modalProduto : null}
           onClose={() => setModalProduto(null)}
           onSaved={handleSavedProduto}
+        />
+      )}
+      {modalProdSite && (
+        <ModalProdutoSite
+          produto={modalProdSite}
+          onClose={() => setModalProdSite(null)}
+          onSaved={p => {
+            setProdutos(prev => prev.map(x => x.id === p.id ? p : x))
+            showToast('Produto atualizado!')
+          }}
         />
       )}
       {modalSlide !== null && (

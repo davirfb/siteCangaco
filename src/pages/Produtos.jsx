@@ -6,6 +6,7 @@ import Navbar from "../components/Navbar.jsx";
 import Footer from "../components/Footer.jsx";
 import BackToTop from "../components/BackToTop.jsx";
 import { useScrollAnim } from "../hooks/useScrollAnim.js";
+import { visivelNoSite } from "../utils/produtos.js";
 import { gerarCatalogoPDF } from "../utils/gerarPDF.js";
 
 function ProdutoCard({ p }) {
@@ -57,7 +58,7 @@ export default function Produtos() {
         );
         const list = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((p) => p.ativo !== false);
+          .filter(visivelNoSite);
         setProdutos(list);
       } catch (err) {
         console.error(err);
