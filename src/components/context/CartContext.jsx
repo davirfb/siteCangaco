@@ -1,10 +1,24 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 
 const CartContext = createContext(null)
+const STORAGE_KEY = 'cangaco_carrinho'
+
+function carregarItens() {
+  try {
+    const salvo = JSON.parse(localStorage.getItem(STORAGE_KEY))
+    return Array.isArray(salvo) ? salvo : []
+  } catch {
+    return []
+  }
+}
 
 export function CartProvider({ children }) {
-  const [itens, setItens]     = useState([])
+  const [itens, setItens]     = useState(carregarItens)
   const [aberto, setAberto]   = useState(false)
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(itens)) } catch {}
+  }, [itens])
 
   function adicionar(produto, quantidade = 1) {
     setItens(prev => {

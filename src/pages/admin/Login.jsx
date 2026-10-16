@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { auth } from '../../lib/firebase.js'
-import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth'
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth'
 
 const ERROS = {
   'auth/user-not-found':         'E-mail não cadastrado.',
@@ -35,6 +35,22 @@ export default function AdminLogin() {
       navigate('/admin/dashboard', { replace: true })
     } catch (err) {
       setErro(ERROS[err.code] || 'Erro ao fazer login. Tente novamente.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleGoogleLogin() {
+    setErro('')
+    setLoading(true)
+    try {
+      const provider = new GoogleAuthProvider()
+      await signInWithPopup(auth, provider)
+      navigate('/admin/dashboard', { replace: true })
+    } catch (err) {
+      if (err.code === 'auth/popup-closed-by-user') setErro('Login cancelado.')
+      else if (err.code === 'auth/popup-blocked') setErro('Pop-up foi bloqueado. Verifique as configurações do navegador.')
+      else setErro('Erro ao fazer login com Google. Tente novamente.')
     } finally {
       setLoading(false)
     }
@@ -84,6 +100,18 @@ export default function AdminLogin() {
             {loading ? <><i className="fas fa-spinner fa-spin"></i> Entrando...</> : 'Entrar'}
           </button>
         </form>
+
+        <div className="flex items-center gap-3 my-6">
+          <div className="flex-1 h-px bg-gray-300"></div>
+          <span className="text-gray-500 text-sm font-medium">ou</span>
+          <div className="flex-1 h-px bg-gray-300"></div>
+        </div>
+
+        <button onClick={handleGoogleLogin} disabled={loading}
+                className="w-full bg-white border-2 border-gray-200 text-gray-700 py-3 rounded-lg font-semibold text-base hover:border-primary hover:bg-gray-50 transition-colors disabled:opacity-60 cursor-pointer flex items-center justify-center gap-3">
+          <i className="fab fa-google text-xl"></i>
+          Entrar com Google
+        </button>
 
         <div className="text-center mt-6">
           <Link to="/" className="text-text-light text-sm hover:text-primary transition-colors">
