@@ -85,9 +85,16 @@ function FormCliente({ id, inicial, onClose, onSaved, showToast }) {
   async function handleSubmit(e) {
     e.preventDefault()
     setErro('')
+    const pf = form.tipo !== 'J'
+    if (!pf && Number(form.indicadorIe) === 1 && !form.ie.trim()) {
+      setErro('Para contribuinte de ICMS, informe a Inscrição Estadual ou escolha "Contribuinte isento" / "Não contribuinte".')
+      return
+    }
     setSaving(true)
     try {
-      const { endereco, ...resto } = form
+      const { endereco, ...dados } = form
+      // Pessoa física nunca é contribuinte de ICMS
+      const resto = pf ? { ...dados, indicadorIe: 9, ie: '', fantasia: '' } : dados
       const salvo = await api('/clientes', {
         method: 'POST',
         body: { acao: 'salvar', cliente: { ...resto, id: id === 'novo' ? undefined : id, endereco: { geral: endereco } } },
@@ -113,7 +120,9 @@ function FormCliente({ id, inicial, onClose, onSaved, showToast }) {
         </div>
         <div>
           <label className={labelCls}>Tipo de pessoa</label>
-          <select value={form.tipo} onChange={e => set('tipo', e.target.value)} className={inputCls}>
+          <select value={form.tipo}
+                  onChange={e => setForm(f => ({ ...f, tipo: e.target.value, indicadorIe: e.target.value === 'J' ? 1 : 9 }))}
+                  className={inputCls}>
             <option value="J">Jurídica (CNPJ)</option>
             <option value="F">Física (CPF)</option>
           </select>
