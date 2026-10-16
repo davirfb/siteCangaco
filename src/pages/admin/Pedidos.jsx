@@ -17,6 +17,21 @@ const LINK_BLING = {
   nfe:    id => `https://www.bling.com.br/notas.fiscais.php#edit/${id}`,
   nfce:   id => `https://www.bling.com.br/nfces.php#edit/${id}`,
 }
+// Abre o WhatsApp do cliente com o link do DANFE (sem celular, o WhatsApp pede o contato)
+function enviarDanfeWhatsApp({ nota, numeroPedido, clienteNome, celular }) {
+  const link = nota.linkDanfe || nota.linkPDF
+  const msg = [
+    `Olá, ${clienteNome}!`,
+    '',
+    `Segue a ${nota.tipo === 'nfce' ? 'NFC-e' : 'nota fiscal (NF-e)'} nº ${nota.numero} referente ao pedido nº ${numeroPedido ?? ''}:`,
+    link,
+    '',
+    'Cangaço Alimentos',
+  ].join('\n')
+  const cel = String(celular || '').replace(/\D/g, '').replace(/^55/, '')
+  window.open(`https://wa.me/${cel ? '55' + cel : ''}?text=${encodeURIComponent(msg)}`, '_blank')
+}
+
 const notaAutorizada = n => [5, 6, 7].includes(Number(n?.situacao))
 const notaAguardando = n => [3, 8, 10].includes(Number(n?.situacao))
 const notaFalhou     = n => [2, 4, 9].includes(Number(n?.situacao))
@@ -212,6 +227,14 @@ function FluxoNota({ pedido, tipo, onClose, onNota }) {
                 </a>
               )}
             </div>
+            {(nota.linkDanfe || nota.linkPDF) && (
+              <button onClick={() => enviarDanfeWhatsApp({ nota, numeroPedido: pedido.numero, clienteNome: pedido.clienteNome, celular: pedido.clienteCelular })}
+                      className={`${btn} bg-green-600 text-white hover:bg-green-700 border-none`}>
+                <i className="fab fa-whatsapp text-lg"></i>
+                Enviar DANFE ao cliente{pedido.clienteCelular ? ` (${pedido.clienteCelular})` : ''}
+              </button>
+            )}
+            {!pedido.clienteCelular && <p className="text-xs text-gray-400 text-center -mt-2">Cliente sem celular cadastrado: o WhatsApp vai pedir o contato.</p>}
           </>
         )}
       </div>
@@ -365,7 +388,13 @@ function ModalPedido({ pedido: inicial, info, formas, onClose, onAtualizar, onEd
             <i className="fas fa-receipt text-blue-700"></i>
             <span className="flex-1 text-sm text-blue-900 font-semibold">{rotuloNota(pedido.nota)} · {pedido.nota.situacaoTexto}</span>
             {notaAutorizada(pedido.nota) && (pedido.nota.linkDanfe || pedido.nota.linkPDF) && (
-              <a href={pedido.nota.linkDanfe || pedido.nota.linkPDF} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">DANFE</a>
+              <>
+                <a href={pedido.nota.linkDanfe || pedido.nota.linkPDF} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">DANFE</a>
+                <button onClick={() => enviarDanfeWhatsApp({ nota: pedido.nota, numeroPedido: pedido.numero, clienteNome: nomeCli, celular: info.celular })}
+                        className="text-xs font-semibold text-green-700 hover:underline cursor-pointer bg-transparent border-none">
+                  <i className="fab fa-whatsapp mr-1"></i>Enviar ao cliente
+                </button>
+              </>
             )}
             {!notaAutorizada(pedido.nota) && !notaFalhou(pedido.nota) && (
               <button onClick={() => onNota(pedido, pedido.nota.tipo)} className="text-xs font-semibold text-blue-700 hover:underline cursor-pointer bg-transparent border-none">Revisar / enviar</button>
@@ -831,7 +860,7 @@ export default function SecaoPedidos({ showToast, irPara }) {
       {fluxoNota && pedidos.find(p => p.id === fluxoNota.id) && (() => {
         const p = pedidos.find(x => x.id === fluxoNota.id)
         return (
-          <FluxoNota pedido={{ ...p, clienteNome: infoCliente(p).nome }} tipo={fluxoNota.tipo}
+          <FluxoNota pedido={{ ...p, clienteNome: infoCliente(p).nome, clienteCelular: infoCliente(p).celular }} tipo={fluxoNota.tipo}
                      onClose={() => setFluxoNota(null)}
                      onNota={nota => atualizarPedido({ id: p.id, nota })} />
         )

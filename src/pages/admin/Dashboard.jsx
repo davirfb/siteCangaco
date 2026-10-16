@@ -7,6 +7,7 @@ import { api } from '../../lib/api.js'
 import SecaoClientes from './Clientes.jsx'
 import SecaoCriarPedido from './CriarPedido.jsx'
 import SecaoPedidos from './Pedidos.jsx'
+import SecaoInicio from './Inicio.jsx'
 import VinculoBling from './VinculoBling.jsx'
 import { auth, db } from '../../lib/firebase.js'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
@@ -728,7 +729,7 @@ function SecaoBling({ showToast }) {
 
 /* ── Dashboard ── */
 export default function Dashboard() {
-  const [activeSection, setActiveSection] = useRascunho('admin:secao', 'catalogo')
+  const [activeSection, setActiveSection] = useRascunho('admin:secao', 'inicio')
   const [produtos,   setProdutos]   = useState([])
   const [slides,     setSlides]     = useState([])
   const [gerandoPDF, setGerandoPDF] = useState(false)
@@ -843,13 +844,17 @@ export default function Dashboard() {
   }
 
   const navItems = [
-    { id: 'catalogo', icon: 'fa-box',      label: 'Catálogo' },
-    { id: 'pedidos',  icon: 'fa-cart-plus', label: 'Criar Pedido' },
+    { id: 'inicio',   icon: 'fa-home',     label: 'Início' },
     { id: 'listaPedidos', icon: 'fa-clipboard-list', label: 'Pedidos' },
+    { id: 'pedidos',  icon: 'fa-cart-plus', label: 'Criar Pedido' },
+    { id: 'catalogo', icon: 'fa-box',      label: 'Catálogo' },
     { id: 'clientes', icon: 'fa-users',    label: 'Clientes' },
     { id: 'site',     icon: 'fa-globe',    label: 'Site'     },
     { id: 'bling',    icon: 'fa-plug',     label: 'Bling'    },
   ]
+  // No celular: estes ficam na barra de baixo; o resto vai para o menu ☰
+  const navPrincipais = ['inicio', 'listaPedidos', 'pedidos']
+  const [menuAberto, setMenuAberto] = useState(false)
 
   function sair() { signOut(auth).then(() => navigate('/admin', { replace: true })) }
 
@@ -1038,6 +1043,9 @@ export default function Dashboard() {
             </>
           )}
 
+          {/* ── Início ── */}
+          {activeSection === 'inicio' && <SecaoInicio showToast={showToast} irPara={setActiveSection} />}
+
           {/* ── Pedidos (lista) ── */}
           {activeSection === 'listaPedidos' && <SecaoPedidos showToast={showToast} irPara={setActiveSection} />}
 
@@ -1172,20 +1180,37 @@ export default function Dashboard() {
       </div>
 
       {/* Bottom nav — mobile */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex md:hidden z-40 shadow-lg overflow-x-auto">
-        {navItems.map(item => (
-          <button key={item.id} onClick={() => setActiveSection(item.id)}
-                  className={`flex-1 min-w-[68px] shrink-0 flex flex-col items-center py-3 gap-1 transition-colors cursor-pointer border-none ${activeSection === item.id ? 'text-primary bg-orange-50/60' : 'text-gray-500 bg-transparent'}`}>
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex md:hidden z-40 shadow-lg">
+        {navItems.filter(item => navPrincipais.includes(item.id)).map(item => (
+          <button key={item.id} onClick={() => { setActiveSection(item.id); setMenuAberto(false) }}
+                  className={`flex-1 flex flex-col items-center py-3 gap-1 transition-colors cursor-pointer border-none ${activeSection === item.id ? 'text-primary bg-orange-50/60' : 'text-gray-500 bg-transparent'}`}>
             <i className={`fas ${item.icon} text-xl`}></i>
             <span className="text-[10px] font-medium whitespace-nowrap">{item.label}</span>
           </button>
         ))}
-        <button onClick={sair}
-                className="flex-1 min-w-[68px] shrink-0 flex flex-col items-center py-3 gap-1 text-gray-500 bg-transparent border-none cursor-pointer">
-          <i className="fas fa-sign-out-alt text-xl"></i>
-          <span className="text-[10px] font-medium">Sair</span>
+        <button onClick={() => setMenuAberto(a => !a)}
+                className={`flex-1 flex flex-col items-center py-3 gap-1 transition-colors cursor-pointer border-none ${menuAberto || !navPrincipais.includes(activeSection) ? 'text-primary bg-orange-50/60' : 'text-gray-500 bg-transparent'}`}>
+          <i className={`fas ${menuAberto ? 'fa-times' : 'fa-bars'} text-xl`}></i>
+          <span className="text-[10px] font-medium">Menu</span>
         </button>
       </nav>
+
+      {/* Menu ☰ — mobile */}
+      {menuAberto && (
+        <div className="fixed inset-0 z-30 md:hidden bg-black/40" onClick={() => setMenuAberto(false)}>
+          <div className="absolute right-2 bottom-[72px] w-56 bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            {navItems.filter(item => !navPrincipais.includes(item.id)).map(item => (
+              <button key={item.id} onClick={() => { setActiveSection(item.id); setMenuAberto(false) }}
+                      className={`w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer border-none border-b border-gray-100 ${activeSection === item.id ? 'text-primary bg-orange-50 font-semibold' : 'text-text-dark bg-white'}`}>
+                <i className={`fas ${item.icon} w-5 text-center`}></i>{item.label}
+              </button>
+            ))}
+            <button onClick={sair} className="w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer border-none bg-white text-red-500">
+              <i className="fas fa-sign-out-alt w-5 text-center"></i>Sair
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modais */}
       {(modalProduto === 'novo' || produtoEditando) && (
