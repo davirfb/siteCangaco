@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { gerarCatalogoPDF, gerarPedidoPDF } from '../../utils/gerarPDF.js'
 import { visivelNoSite } from '../../utils/produtos.js'
 import { useRascunho, limparRascunhos } from '../../hooks/useRascunho.js'
+import { api } from '../../lib/api.js'
 import { auth, db } from '../../lib/firebase.js'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import {
@@ -897,6 +898,114 @@ function SecaoPedido({ produtos }) {
   )
 }
 
+/* ── Seção Bling (conexão com a API) ── */
+function SecaoBling({ showToast }) {
+  const [status,   setStatus]   = useState(null)
+  const [carregando, setCarregando] = useState(true)
+  const [acao,     setAcao]     = useState(false)
+
+  async function carregar() {
+    setCarregando(true)
+    try { setStatus(await api('/bling/status')) }
+    catch (err) { setStatus({ conectado: false, erro: err.message }) }
+    finally { setCarregando(false) }
+  }
+
+  useEffect(() => { carregar() }, [])
+
+  async function conectar() {
+    setAcao(true)
+    try {
+      const { url } = await api('/bling/conectar', { method: 'POST' })
+      window.location.href = url
+    } catch (err) {
+      showToast(err.message, 'error')
+      setAcao(false)
+    }
+  }
+
+  async function desconectar() {
+    if (!window.confirm('Desconectar o Bling? O sistema deixa de acessar pedidos, clientes e notas até conectar de novo.')) return
+    setAcao(true)
+    try {
+      await api('/bling/desconectar', { method: 'POST' })
+      showToast('Bling desconectado.')
+      await carregar()
+    } catch (err) { showToast(err.message, 'error') }
+    finally { setAcao(false) }
+  }
+
+  const fmtData = ms => ms ? new Date(ms).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—'
+  const temConexao = status?.conectadoPor || status?.conectado
+
+  return (
+    <>
+      <div className="mb-5">
+        <h2 className="text-xl font-bold text-text-dark">Bling</h2>
+        <p className="text-sm text-gray-400 mt-0.5">Conexão com o Bling para pedidos, clientes e notas fiscais</p>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 max-w-xl">
+        {carregando ? (
+          <div className="flex items-center gap-3 text-primary">
+            <i className="fas fa-spinner fa-spin"></i> Verificando conexão...
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 mb-4">
+              <span className={`w-3 h-3 rounded-full ${status?.conectado ? 'bg-green-500' : temConexao ? 'bg-yellow-500' : 'bg-gray-300'}`}></span>
+              <p className="font-semibold text-text-dark">
+                {status?.conectado ? 'Conectado' : temConexao ? 'Conexão com problema' : 'Não conectado'}
+              </p>
+            </div>
+
+            {status?.conectado && (
+              <dl className="text-sm grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 mb-5">
+                <dt className="text-gray-400">Empresa</dt>          <dd className="text-text-dark">{status.empresa || '—'}</dd>
+                <dt className="text-gray-400">Conectado por</dt>    <dd className="text-text-dark break-all">{status.conectadoPor || '—'}</dd>
+                <dt className="text-gray-400">Conectado em</dt>     <dd className="text-text-dark">{fmtData(status.conectadoEm)}</dd>
+                <dt className="text-gray-400">Renovação válida até</dt><dd className="text-text-dark">{fmtData(status.refreshExpiraEm)}</dd>
+              </dl>
+            )}
+
+            {status?.erro && (
+              <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm mb-5" role="alert">
+                {status.erro}
+              </div>
+            )}
+
+            {!status?.conectado && (
+              <p className="text-sm text-gray-500 mb-5">
+                Clique em conectar, entre com a conta do Bling da Cangaço e autorize o aplicativo <strong>Site Cangaço</strong>.
+                Isso só precisa ser feito uma vez.
+              </p>
+            )}
+
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={conectar} disabled={acao}
+                      className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-lg font-semibold text-sm hover:bg-dark-brown transition-colors cursor-pointer border-none disabled:opacity-60">
+                <i className="fas fa-plug"></i> {temConexao ? 'Reconectar' : 'Conectar ao Bling'}
+              </button>
+              {temConexao && (
+                <>
+                  <button onClick={carregar} disabled={acao}
+                          className="flex items-center gap-2 bg-white border-2 border-gray-200 text-text-dark px-4 py-2 rounded-lg font-semibold text-sm hover:border-primary hover:text-primary transition-colors cursor-pointer disabled:opacity-60">
+                    <i className="fas fa-sync-alt"></i> Testar conexão
+                  </button>
+                  <button onClick={desconectar} disabled={acao}
+                          className="flex items-center gap-2 bg-red-50 text-red-500 px-4 py-2.5 rounded-lg font-semibold text-sm hover:bg-red-100 transition-colors cursor-pointer border-none disabled:opacity-60">
+                    <i className="fas fa-unlink"></i> Desconectar
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  )
+}
+
 /* ── Dashboard ── */
 export default function Dashboard() {
   const [activeSection, setActiveSection] = useRascunho('admin:secao', 'catalogo')
@@ -928,6 +1037,17 @@ export default function Dashboard() {
     })
     return unsub
   }, [navigate])
+
+  // Volta da autorização do Bling (/api/bling/callback → ?bling=conectado|erro)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const resultado = params.get('bling')
+    if (!resultado) return
+    setActiveSection('bling')
+    if (resultado === 'conectado') showToast('Bling conectado com sucesso!')
+    else showToast(params.get('msg') || 'Erro ao conectar com o Bling.', 'error')
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [])
 
   async function loadProdutos() {
     setLoading(true)
@@ -1006,6 +1126,7 @@ export default function Dashboard() {
     { id: 'catalogo', icon: 'fa-box',      label: 'Catálogo' },
     { id: 'pedidos',  icon: 'fa-file-alt', label: 'Pedidos'  },
     { id: 'site',     icon: 'fa-globe',    label: 'Site'     },
+    { id: 'bling',    icon: 'fa-plug',     label: 'Bling'    },
   ]
 
   function sair() { signOut(auth).then(() => navigate('/admin', { replace: true })) }
@@ -1185,6 +1306,9 @@ export default function Dashboard() {
               }
             </>
           )}
+
+          {/* ── Bling ── */}
+          {activeSection === 'bling' && <SecaoBling showToast={showToast} />}
 
           {/* ── Site ── */}
           {activeSection === 'site' && (
