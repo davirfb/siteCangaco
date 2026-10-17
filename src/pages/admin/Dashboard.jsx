@@ -4,6 +4,7 @@ import { gerarCatalogoPDF } from '../../utils/gerarPDF.js'
 import { visivelNoSite } from '../../utils/produtos.js'
 import { useRascunho, limparRascunhos } from '../../hooks/useRascunho.js'
 import { api } from '../../lib/api.js'
+import { limparCacheDados } from '../../lib/dados.js'
 import SecaoClientes from './Clientes.jsx'
 import SecaoCriarPedido from './CriarPedido.jsx'
 import SecaoPedidos from './Pedidos.jsx'
@@ -856,7 +857,7 @@ export default function Dashboard() {
   const navPrincipais = ['inicio', 'listaPedidos', 'pedidos']
   const [menuAberto, setMenuAberto] = useState(false)
 
-  function sair() { signOut(auth).then(() => navigate('/admin', { replace: true })) }
+  function sair() { limparCacheDados(); signOut(auth).then(() => navigate('/admin', { replace: true })) }
 
   return (
     <div className="min-h-screen bg-gray-50">

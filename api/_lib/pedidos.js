@@ -91,6 +91,8 @@ function paraCache(p, situacoes) {
       numeroDocumento: (p.contato?.numeroDocumento ?? '').replace(/\D/g, ''),
     },
     sincronizadoEm: FieldValue.serverTimestamp(),
+    // usado pelo navegador para buscar só o que mudou
+    atualizadoEm:   FieldValue.serverTimestamp(),
   }
 }
 
@@ -200,7 +202,7 @@ export async function sincronizarPedidos({ completo = false, limiteDetalhes = 25
   // Os que passaram do limite ficam para quando forem abertos
   if (alterados.length > limiteDetalhes) {
     const batch = adminDb.batch()
-    alterados.slice(limiteDetalhes).forEach(id => batch.set(colPedidos().doc(id), { detalheEm: null }, { merge: true }))
+    alterados.slice(limiteDetalhes).forEach(id => batch.set(colPedidos().doc(id), { detalheEm: null, atualizadoEm: FieldValue.serverTimestamp() }, { merge: true }))
     await batch.commit()
   }
 

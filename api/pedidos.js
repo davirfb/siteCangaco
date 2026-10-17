@@ -116,6 +116,7 @@ async function criarPedido(p, usuario) {
     formaPagamentoId: String(p.formaPagamentoId), prazoDias: prazo, dataEntrega: entrega,
     data: corpo.data, dataPrevista: entrega,
     origem: 'site', criadoPor: usuario.email, criadoEm: FieldValue.serverTimestamp(), detalheEm: Date.now(),
+    atualizadoEm: FieldValue.serverTimestamp(),
   }, { merge: true })
   if (p.orcamentoId) await colOrcamentos().doc(String(p.orcamentoId)).set({ convertidoEm: id, convertidoNumero: numero }, { merge: true })
   return { id, numero, total }
@@ -137,6 +138,7 @@ async function editarPedido(id, p, usuario) {
     cliente: resumoCliente(p.cliente), itens, total, obs: corpo.observacoes,
     formaPagamentoId: String(p.formaPagamentoId), prazoDias: prazo, dataEntrega: entrega, dataPrevista: entrega,
     alteradoPor: usuario.email, alteradoEm: FieldValue.serverTimestamp(), detalheEm: Date.now(),
+    atualizadoEm: FieldValue.serverTimestamp(),
   }, { merge: true })
   return { id: String(id), numero: atual.numero, total }
 }
@@ -146,7 +148,7 @@ async function mudarSituacao(id, destino) {
   const idSit = await idSituacao(destino)
   await blingFetch(`/pedidos/vendas/${id}/situacoes/${idSit}`, { method: 'PATCH' })
   const nome = (await situacoesVendas()).find(s => s.id === idSit)?.nome ?? ''
-  await colPedidos().doc(String(id)).set({ situacaoId: idSit, situacaoNome: nome, situacao: destino }, { merge: true })
+  await colPedidos().doc(String(id)).set({ situacaoId: idSit, situacaoNome: nome, situacao: destino, atualizadoEm: FieldValue.serverTimestamp() }, { merge: true })
   return { id: String(id), situacao: destino, situacaoNome: nome }
 }
 
@@ -178,7 +180,7 @@ async function gerarNota(id, tipo) {
   const notaId = r?.data?.idNotaFiscal ?? r?.idNotaFiscal ?? r?.data?.id
   if (!notaId) throw new HttpError(502, 'O Bling não informou a nota gerada.')
   const nova = await lerNota(tipo, notaId)
-  await ref.set({ nota: nova }, { merge: true })
+  await ref.set({ nota: nova, atualizadoEm: FieldValue.serverTimestamp() }, { merge: true })
 
   let naturezaNome = null
   if (nova.naturezaOperacao) {
@@ -199,7 +201,7 @@ async function enviarNota(id) {
   } catch (err) { erroEnvio = err }
 
   const atualizada = await lerNota(nota.tipo, nota.id)
-  await ref.set({ nota: atualizada }, { merge: true })
+  await ref.set({ nota: atualizada, atualizadoEm: FieldValue.serverTimestamp() }, { merge: true })
   if (erroEnvio && !notaAutorizada(atualizada.situacao)) throw erroEnvio
   return { nota: atualizada }
 }
@@ -209,7 +211,7 @@ async function consultarNota(id) {
   const nota = (await ref.get()).data()?.nota
   if (!nota?.id) throw new HttpError(404, 'Este pedido não tem nota.')
   const atualizada = await lerNota(nota.tipo, nota.id)
-  await ref.set({ nota: atualizada }, { merge: true })
+  await ref.set({ nota: atualizada, atualizadoEm: FieldValue.serverTimestamp() }, { merge: true })
   return { nota: atualizada }
 }
 
@@ -237,14 +239,20 @@ async function salvarOrcamento(o, usuario) {
   return { id: ref.id, total: dados.total }
 }
 
-async function listar() {
+// Com "desde" devolve só os pedidos alterados depois disso (economiza leituras do Firestore).
+// Orçamentos são poucos: sempre vêm todos.
+async function listar(desde) {
+  const agora = Date.now()
+  const consulta = desde ? colPedidos().where('atualizadoEm', '>', Timestamp.fromMillis(desde)) : colPedidos()
   const [pedidos, orcamentos, ultimaEm] = await Promise.all([
-    colPedidos().get(), colOrcamentos().get(), ultimaSincronizacaoPedidos(),
+    consulta.get(), colOrcamentos().get(), ultimaSincronizacaoPedidos(),
   ])
   return {
     pedidos:    pedidos.docs.map(d => serializar({ id: d.id, ...d.data() })),
     orcamentos: orcamentos.docs.map(d => serializar({ id: d.id, ...d.data() })),
     ultimaSincronizacao: ultimaEm,
+    agora,
+    incremental: !!desde,
   }
 }
 
@@ -253,7 +261,7 @@ export default rota(['GET', 'POST'], async (req, res) => {
 
   if (req.method === 'GET') {
     const { recurso } = req.query
-    if (recurso === 'lista')           return res.json(await listar())
+    if (recurso === 'lista')           return res.json(await listar(Number(req.query.desde) || 0))
     if (recurso === 'produtosBling')   return res.json({ produtos: await produtosBling() })
     if (recurso === 'formasPagamento') return res.json({ formas: await formasPagamento() })
     if (recurso === 'naturezas')       return res.json({ naturezas: await naturezas() })

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../../lib/api.js'
+import { obterClientes, obterPedidos } from '../../lib/dados.js'
 import { useRascunho } from '../../hooks/useRascunho.js'
 import {
   formatarDocumento, nomeExibicao, filtrarClientes, ordenarClientes, destaquesDoCliente,
@@ -516,7 +517,7 @@ export default function SecaoPedidos({ showToast, irPara }) {
   const [fluxoNota, setFluxoNota]   = useState(null)
 
   async function carregar() {
-    const r = await api('/pedidos?recurso=lista')
+    const r = await obterPedidos()
     setPedidos(r.pedidos)
     setOrcamentos(r.orcamentos)
     setUltimaSync(r.ultimaSincronizacao)
@@ -538,12 +539,12 @@ export default function SecaoPedidos({ showToast, irPara }) {
       try {
         const [r] = await Promise.all([
           carregar(),
-          api('/clientes').then(c => { setClientes(c.clientes); setGrupos(c.grupos ?? []) }),
+          obterClientes().then(c => { setClientes(c.clientes); setGrupos(c.grupos ?? []) }),
         ])
         setCarregando(false)
         api('/pedidos?recurso=formasPagamento').then(f => setFormas(f.formas)).catch(() => {})
         if (!r.ultimaSincronizacao) await sincronizar({ completo: true })
-        else if (Date.now() - r.ultimaSincronizacao > 5 * 60 * 1000) await sincronizar({ silencioso: true })
+        else if (Date.now() - r.ultimaSincronizacao > 30 * 60 * 1000) await sincronizar({ silencioso: true })
       } catch (err) { showToast(err.message, 'error'); setCarregando(false) }
     })()
   }, [])

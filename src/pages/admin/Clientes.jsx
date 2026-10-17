@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../../lib/api.js'
+import { obterClientes } from '../../lib/dados.js'
 import { useRascunho, limparRascunhos } from '../../hooks/useRascunho.js'
 import {
   formatarDocumento, nomeExibicao, filtrarClientes, ordenarClientes,
@@ -557,7 +558,7 @@ export default function SecaoClientes({ showToast }) {
   const [modalGrupo, setModalGrupo] = useRascunho('admin:modalGrupo', null)
 
   async function carregarLista() {
-    const r = await api('/clientes')
+    const r = await obterClientes()
     setClientes(r.clientes)
     setGrupos(r.grupos ?? [])
     setUltimaSync(r.ultimaSincronizacao)
@@ -582,9 +583,9 @@ export default function SecaoClientes({ showToast }) {
       try {
         const r = await carregarLista()
         setCarregando(false)
-        // Primeira vez: importa tudo do Bling. Depois: só o que mudou, se faz mais de 5 min
+        // Primeira vez: importa tudo do Bling. Depois: só o que mudou, se faz mais de 30 min
         if (!r.ultimaSincronizacao) await sincronizar({ completo: true })
-        else if (Date.now() - r.ultimaSincronizacao > 5 * 60 * 1000) await sincronizar({ silencioso: true })
+        else if (Date.now() - r.ultimaSincronizacao > 30 * 60 * 1000) await sincronizar({ silencioso: true })
       } catch (err) {
         setErro(err.message)
         setCarregando(false)

@@ -21,6 +21,8 @@ export function paraCache(c) {
     telefone:        c.telefone ?? '',
     celular:         c.celular ?? '',
     sincronizadoEm:  FieldValue.serverTimestamp(),
+    // usado pelo navegador para buscar só o que mudou
+    atualizadoEm:    FieldValue.serverTimestamp(),
   }
   if (c.fantasia !== undefined) dados.fantasia = c.fantasia ?? ''
   if (c.tipo     !== undefined) dados.tipo     = c.tipo

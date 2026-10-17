@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../../lib/api.js'
+import { obterClientes } from '../../lib/dados.js'
 import { useRascunho, limparRascunhos } from '../../hooks/useRascunho.js'
 import {
   formatarDocumento, nomeExibicao, filtrarClientes, ordenarClientes, destaquesDoCliente,
@@ -205,7 +206,7 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
   const [erro,     setErro]     = useState('')
 
   useEffect(() => {
-    api('/clientes')
+    obterClientes()
       .then(r => { setClientes(r.clientes); setGrupos(r.grupos ?? []) })
       .catch(err => showToast(err.message, 'error'))
       .finally(() => setCarregando(false))

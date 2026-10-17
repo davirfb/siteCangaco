@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../../lib/api.js'
+import { obterClientes, obterPedidos } from '../../lib/dados.js'
 import { useRascunho } from '../../hooks/useRascunho.js'
 import { nomeExibicao, destaquesDoCliente } from '../../lib/clientes.js'
 
@@ -31,7 +32,7 @@ export default function SecaoInicio({ showToast, irPara }) {
   const [diaSel, setDiaSel] = useState(null)
 
   async function carregar() {
-    const r = await api('/pedidos?recurso=lista')
+    const r = await obterPedidos()
     setPedidos(r.pedidos)
     return r
   }
@@ -41,11 +42,11 @@ export default function SecaoInicio({ showToast, irPara }) {
       try {
         const [r] = await Promise.all([
           carregar(),
-          api('/clientes').then(c => { setClientes(c.clientes); setGrupos(c.grupos ?? []) }),
+          obterClientes().then(c => { setClientes(c.clientes); setGrupos(c.grupos ?? []) }),
         ])
         setCarregando(false)
-        // Atualiza com o Bling em segundo plano se faz mais de 5 minutos
-        if (r.ultimaSincronizacao && Date.now() - r.ultimaSincronizacao > 5 * 60 * 1000) {
+        // Atualiza com o Bling em segundo plano se faz mais de 30 minutos
+        if (r.ultimaSincronizacao && Date.now() - r.ultimaSincronizacao > 30 * 60 * 1000) {
           await api('/pedidos', { method: 'POST', body: { acao: 'sincronizar' } })
           await carregar()
         }

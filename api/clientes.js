@@ -1,4 +1,4 @@
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { rota, exigirAdmin, HttpError } from './_lib/auth.js'
 import { blingFetch } from './_lib/bling.js'
 import { colClientes, colGrupos, paraCache, sincronizarClientes, ultimaSincronizacao } from './_lib/clientes.js'
@@ -66,6 +66,7 @@ async function salvar(cliente) {
     destaques: limparDestaques(cliente.destaques),
     grupoId:   cliente.grupoId || null,
     tabelaPreco: ['varejo', 'atacado'].includes(cliente.tabelaPreco) ? cliente.tabelaPreco : null,
+    atualizadoEm: FieldValue.serverTimestamp(),
   }, { merge: true })
   return detalhe(id)
 }
@@ -73,7 +74,7 @@ async function salvar(cliente) {
 async function alterarSituacao(id, ativo) {
   const situacao = ativo ? 'A' : 'I'
   await blingFetch(`/contatos/${id}/situacoes`, { method: 'PATCH', body: { situacao } })
-  await colClientes().doc(String(id)).set({ situacao, sincronizadoEm: FieldValue.serverTimestamp() }, { merge: true })
+  await colClientes().doc(String(id)).set({ situacao, sincronizadoEm: FieldValue.serverTimestamp(), atualizadoEm: FieldValue.serverTimestamp() }, { merge: true })
   return { id: String(id), situacao }
 }
 
@@ -87,8 +88,8 @@ async function salvarGrupo(grupo) {
   const batch = adminDb.batch()
   batch.set(ref, { nome, destaques: limparDestaques(grupo.destaques) }, { merge: true })
   const atuais = await colClientes().where('grupoId', '==', ref.id).get()
-  atuais.docs.forEach(d => { if (!membros.has(d.id)) batch.set(d.ref, { grupoId: null }, { merge: true }) })
-  membros.forEach(id => batch.set(colClientes().doc(id), { grupoId: ref.id }, { merge: true }))
+  atuais.docs.forEach(d => { if (!membros.has(d.id)) batch.set(d.ref, { grupoId: null, atualizadoEm: FieldValue.serverTimestamp() }, { merge: true }) })
+  membros.forEach(id => batch.set(colClientes().doc(id), { grupoId: ref.id, atualizadoEm: FieldValue.serverTimestamp() }, { merge: true }))
   await batch.commit()
   return { id: ref.id, nome, destaques: limparDestaques(grupo.destaques), clienteIds: [...membros] }
 }
@@ -96,7 +97,7 @@ async function salvarGrupo(grupo) {
 async function excluirGrupo(id) {
   const batch = adminDb.batch()
   const membros = await colClientes().where('grupoId', '==', id).get()
-  membros.docs.forEach(d => batch.set(d.ref, { grupoId: null }, { merge: true }))
+  membros.docs.forEach(d => batch.set(d.ref, { grupoId: null, atualizadoEm: FieldValue.serverTimestamp() }, { merge: true }))
   batch.delete(colGrupos().doc(id))
   await batch.commit()
   return { ok: true }
@@ -107,13 +108,17 @@ export default rota(['GET', 'POST'], async (req, res) => {
 
   if (req.method === 'GET') {
     if (req.query.id) return res.json(await detalhe(req.query.id))
-    const [snap, gruposSnap, ultimaEm] = await Promise.all([colClientes().get(), colGrupos().get(), ultimaSincronizacao()])
+    // Com ?desde= devolve só os clientes alterados depois disso (economiza leituras do Firestore)
+    const agora = Date.now()
+    const desde = Number(req.query.desde) || 0
+    const consulta = desde ? colClientes().where('atualizadoEm', '>', Timestamp.fromMillis(desde)) : colClientes()
+    const [snap, gruposSnap, ultimaEm] = await Promise.all([consulta.get(), colGrupos().get(), ultimaSincronizacao()])
     const clientes = snap.docs.map(d => {
-      const { sincronizadoEm, ...dados } = d.data()
+      const { sincronizadoEm, atualizadoEm, ...dados } = d.data()
       return { id: d.id, ...dados }
     })
     const grupos = gruposSnap.docs.map(d => ({ id: d.id, destaques: [], ...d.data() }))
-    return res.json({ clientes, grupos, ultimaSincronizacao: ultimaEm })
+    return res.json({ clientes, grupos, ultimaSincronizacao: ultimaEm, agora, incremental: !!desde })
   }
 
   const { acao } = req.body ?? {}
