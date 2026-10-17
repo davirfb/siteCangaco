@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { db } from '../lib/firebase.js'
-import { doc, getDoc } from 'firebase/firestore'
+import { obterCatalogo } from '../lib/catalogo.js'
 import Navbar    from '../components/Navbar.jsx'
 import Footer    from '../components/Footer.jsx'
 import BackToTop from '../components/BackToTop.jsx'
 import { useCart } from '../components/context/CartContext.jsx'
-import { visivelNoSite } from '../utils/produtos.js'
 
 const WHATSAPP = '5561993779722'
 
@@ -23,9 +21,10 @@ export default function ProdutoDetalhe() {
   useEffect(() => {
     async function load() {
       try {
-        const snap = await getDoc(doc(db, 'produtos', id))
-        const p = snap.exists() ? { id: snap.id, ...snap.data() } : null
-        if (!p || !visivelNoSite(p)) { navigate('/produtos', { replace: true }); return }
+        // O catálogo só traz produtos visíveis no site
+        const { produtos } = await obterCatalogo()
+        const p = produtos.find(x => x.id === id)
+        if (!p) { navigate('/produtos', { replace: true }); return }
         setProduto(p)
       } catch {
         navigate('/produtos', { replace: true })

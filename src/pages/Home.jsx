@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { db } from "../lib/firebase.js";
-import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
+import { obterCatalogo } from "../lib/catalogo.js";
 import Navbar from "../components/Navbar.jsx";
 import Footer from "../components/Footer.jsx";
 import BackToTop from "../components/BackToTop.jsx";
 import { useScrollAnim } from "../hooks/useScrollAnim.js";
-import { visivelNoSite } from "../utils/produtos.js";
 
 const WA_URL =
   "https://wa.me/5561993779722?text=Ol%C3%A1!%20Gostaria%20de%20saber%20mais%20sobre%20seus%20produtos.";
@@ -116,14 +114,8 @@ function SobreSection() {
   const [slides, setSlides] = useState([]);
 
   useEffect(() => {
-    getDocs(query(collection(db, "slider"), orderBy("ordem", "asc")))
-      .then((snap) =>
-        setSlides(
-          snap.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .filter((s) => s.ativo !== false),
-        ),
-      )
+    obterCatalogo()
+      .then((c) => setSlides(c.slider))
       .catch(() => {});
   }, []);
 
@@ -187,22 +179,10 @@ export default function Home() {
   useEffect(() => {
     async function load() {
       try {
-        const snap = await getDocs(
-          query(collection(db, "produtos"), where("destaque", "==", true)),
-        );
-        let list = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter(visivelNoSite)
-          .slice(0, 3);
-
-        if (list.length === 0) {
-          const snap2 = await getDocs(query(collection(db, "produtos")));
-          list = snap2.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .filter(visivelNoSite)
-            .slice(0, 3);
-        }
-        setProdutos(list);
+        // O catálogo já vem só com os produtos visíveis no site
+        const { produtos: todos } = await obterCatalogo();
+        const destaques = todos.filter((p) => p.destaque);
+        setProdutos((destaques.length ? destaques : todos).slice(0, 3));
       } catch (err) {
         console.error(err);
       } finally {

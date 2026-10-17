@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { db } from "../lib/firebase.js";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { obterCatalogo } from "../lib/catalogo.js";
 import Navbar from "../components/Navbar.jsx";
 import Footer from "../components/Footer.jsx";
 import BackToTop from "../components/BackToTop.jsx";
 import { useScrollAnim } from "../hooks/useScrollAnim.js";
-import { visivelNoSite } from "../utils/produtos.js";
 import { gerarCatalogoPDF } from "../utils/gerarPDF.js";
 
 function ProdutoCard({ p }) {
@@ -53,12 +51,8 @@ export default function Produtos() {
   useEffect(() => {
     async function load() {
       try {
-        const snap = await getDocs(
-          query(collection(db, "produtos"), orderBy("criadoEm", "asc")),
-        );
-        const list = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter(visivelNoSite);
+        // Já vem só com os produtos visíveis, em ordem de cadastro
+        const { produtos: list } = await obterCatalogo();
         setProdutos(list);
       } catch (err) {
         console.error(err);
