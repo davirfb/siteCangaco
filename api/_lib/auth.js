@@ -10,6 +10,14 @@ export const ADMINS = [
   'davirochafortesbezerra@gmail.com',
 ]
 
+export const MSG_MANUTENCAO = 'Sistema em manutenção. Tente novamente em alguns minutos.'
+
+// Falhas de infraestrutura (cota do Firestore, indisponibilidade): mostradas como manutenção
+export function emManutencao(err) {
+  const msg = String(err?.message ?? '')
+  return err?.code === 8 || err?.code === 14 || /RESOURCE_EXHAUSTED|Quota exceeded|UNAVAILABLE/i.test(msg)
+}
+
 export class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status }
 }
@@ -40,6 +48,10 @@ export function rota(metodos, handler) {
     try {
       await handler(req, res)
     } catch (err) {
+      if (emManutencao(err)) {
+        console.error(err)
+        return res.status(503).json({ erro: MSG_MANUTENCAO, manutencao: true })
+      }
       const status = err.status || 500
       if (status >= 500) console.error(err)
       res.status(status).json({ erro: err.message || 'Erro interno.' })

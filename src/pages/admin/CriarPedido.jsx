@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../../lib/api.js'
-import { obterClientes } from '../../lib/dados.js'
+import { obterClientes, obterFormasPagamento } from '../../lib/dados.js'
+import { enfileirar } from '../../lib/filaOffline.js'
 import { useRascunho, limparRascunhos } from '../../hooks/useRascunho.js'
 import {
   formatarDocumento, nomeExibicao, filtrarClientes, ordenarClientes, destaquesDoCliente,
@@ -102,7 +103,7 @@ function EscolherProduto({ produtos, valor, tabela, onEscolher }) {
 
 // Abre um pedido em aberto (edição) ou um orçamento no formulário do Criar Pedido.
 // Escreve direto no rascunho; a seção lê ao ser aberta.
-export function abrirNoCriarPedido({ cliente, clienteNome, itens, obs, formaPagamentoId, prazoDias, dataEntrega, tabela, editandoId, editandoNumero, orcamentoId }) {
+export function abrirNoCriarPedido({ cliente, clienteNome, itens, obs, formaPagamentoId, prazoDias, dataEntrega, tabela, editandoId, editandoNumero, orcamentoId, chave }) {
   const grava = (k, v) => { try { localStorage.setItem(PREFIXO + k, JSON.stringify(v)) } catch {} }
   limparRascunhos(PREFIXO)
   grava('cliente', cliente ?? null)
@@ -115,6 +116,7 @@ export function abrirNoCriarPedido({ cliente, clienteNome, itens, obs, formaPaga
   if (tabela) grava('tabela', tabela)
   grava('edicao', editandoId ? { id: editandoId, numero: editandoNumero ?? null } : null)
   grava('orcamentoId', orcamentoId ?? null)
+  if (chave) grava('chave', chave)
 }
 
 /* ── Autocompletar de cliente ── */
@@ -197,6 +199,9 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
   const [novoCliente, setNovoCliente] = useRascunho('admin:criarPedido:novoCliente', false)
   const [edicao,      setEdicao]      = useRascunho(PREFIXO + 'edicao', null)
   const [orcamentoId, setOrcamentoId] = useRascunho(PREFIXO + 'orcamentoId', null)
+  // Chave única deste pedido: evita duplicar no Bling se for reenviado (fila offline)
+  const [chave, setChave] = useRascunho(PREFIXO + 'chave', null)
+  useEffect(() => { if (!chave) setChave(crypto.randomUUID()) }, [chave])
 
   const [clientes, setClientes] = useState([])
   const [grupos,   setGrupos]   = useState([])
@@ -210,10 +215,10 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
       .then(r => { setClientes(r.clientes); setGrupos(r.grupos ?? []) })
       .catch(err => showToast(err.message, 'error'))
       .finally(() => setCarregando(false))
-    api('/pedidos?recurso=formasPagamento')
-      .then(r => {
-        setFormas(r.formas)
-        setFormaId(atual => atual || r.formas.find(f => f.padrao)?.id || r.formas[0]?.id || '')
+    obterFormasPagamento()
+      .then(lista => {
+        setFormas(lista)
+        setFormaId(atual => atual || lista.find(f => f.padrao)?.id || lista[0]?.id || '')
       })
       .catch(err => showToast(err.message, 'error'))
   }, [])
@@ -286,6 +291,7 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
       itens: itens.map(it => ({ ...it, blingProdutoId: blingDe(it) })),
       obs, formaPagamentoId: formaId, prazoDias: prazo, dataEntrega: entrega, tabela,
       orcamentoId: orcamentoId ?? undefined,
+      chave: chave ?? undefined,
     }
   }
 
@@ -302,8 +308,15 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
     if (!itens.length) { setErro('Adicione ao menos um produto.'); return }
     setEnviando('orcamento')
     try {
-      const r = await api('/pedidos', { method: 'POST', body: { acao: 'orcamento_salvar', orcamento: { ...payload(), id: orcamentoId ?? undefined } } })
-      setResultado(snapshot({ tipo: 'orcamento', id: r.id }))
+      const corpo = { acao: 'orcamento_salvar', orcamento: { ...payload(), id: orcamentoId ?? undefined } }
+      try {
+        const r = await api('/pedidos', { method: 'POST', body: corpo })
+        setResultado(snapshot({ tipo: 'orcamento', id: r.id }))
+      } catch (err) {
+        if (!err.offline) throw err
+        enfileirar({ corpo, resumo: { tipo: 'Orçamento', cliente: nomeCliente, total } })
+        setResultado(snapshot({ tipo: 'orcamento', pendente: true }))
+      }
     } catch (err) { setErro(err.message) }
     finally { setEnviando('') }
   }
@@ -321,10 +334,17 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
     )) return
     setEnviando('pedido')
     try {
-      const r = edicao
-        ? await api('/pedidos', { method: 'POST', body: { acao: 'editar', id: edicao.id, pedido: payload() } })
-        : await api('/pedidos', { method: 'POST', body: { acao: 'criar', pedido: payload() } })
-      setResultado(snapshot({ tipo: 'pedido', id: r.id, numero: r.numero, editado: !!edicao }))
+      const corpo = edicao
+        ? { acao: 'editar', id: edicao.id, pedido: payload() }
+        : { acao: 'criar', pedido: payload() }
+      try {
+        const r = await api('/pedidos', { method: 'POST', body: corpo })
+        setResultado(snapshot({ tipo: 'pedido', id: r.id, numero: r.numero, editado: !!edicao }))
+      } catch (err) {
+        if (!err.offline) throw err
+        enfileirar({ corpo, resumo: { tipo: edicao ? `Alteração do pedido nº ${edicao.numero ?? ''}` : 'Pedido', cliente: nomeCliente, total } })
+        setResultado(snapshot({ tipo: 'pedido', pendente: true, editado: !!edicao }))
+      }
     } catch (err) { setErro(err.message) }
     finally { setEnviando('') }
   }
@@ -333,7 +353,7 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
     limparRascunhos(PREFIXO)
     setCliente(null); setTexto(''); setItens([]); setProdSel(''); setQtdSel(1); setPrecoSel('')
     setObs(''); setPrazo(0); setEntrega(hojeISO()); setResultado(null); setTabela('atacado'); setFardosCustom({})
-    setEdicao(null); setOrcamentoId(null)
+    setEdicao(null); setOrcamentoId(null); setChave(crypto.randomUUID())
     setFormaId(formas.find(f => f.padrao)?.id || formas[0]?.id || '')
   }
 
@@ -358,17 +378,21 @@ export default function SecaoCriarPedido({ produtos, showToast }) {
     return (
       <div className="flex flex-col items-center justify-center py-12 gap-6 text-center">
         <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
-          <i className={`fas ${pedido ? 'fa-check' : 'fa-file-alt'} text-4xl text-green-600`}></i>
+          <i className={`fas ${resultado.pendente ? 'fa-cloud-upload-alt' : pedido ? 'fa-check' : 'fa-file-alt'} text-4xl text-green-600`}></i>
         </div>
         <div>
           <p className="text-xl font-bold text-text-dark mb-1">
-            {pedido
-              ? `Pedido${resultado.numero ? ' nº ' + resultado.numero : ''} ${resultado.editado ? 'alterado' : 'criado'} no Bling!`
-              : 'Orçamento salvo!'}
+            {resultado.pendente
+              ? `${pedido ? (resultado.editado ? 'Alteração' : 'Pedido') : 'Orçamento'} salvo no aparelho`
+              : pedido
+                ? `Pedido${resultado.numero ? ' nº ' + resultado.numero : ''} ${resultado.editado ? 'alterado' : 'criado'} no Bling!`
+                : 'Orçamento salvo!'}
           </p>
           <p className="text-gray-400 text-sm">
             {resultado.cliente} · {brl(resultado.total)}
-            {pedido ? ' · situação "Em aberto"' : ' · fica só no site, não vai para o Bling'}
+            {resultado.pendente
+              ? ' · sem internet agora: será enviado automaticamente quando a conexão voltar'
+              : pedido ? ' · situação "Em aberto"' : ' · fica só no site, não vai para o Bling'}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 flex-wrap justify-center">

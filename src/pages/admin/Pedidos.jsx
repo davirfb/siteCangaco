@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../../lib/api.js'
-import { obterClientes, obterPedidos } from '../../lib/dados.js'
+import { obterClientes, obterPedidos, obterFormasPagamento } from '../../lib/dados.js'
 import { useRascunho } from '../../hooks/useRascunho.js'
 import {
   formatarDocumento, nomeExibicao, filtrarClientes, ordenarClientes, destaquesDoCliente,
@@ -542,7 +542,7 @@ export default function SecaoPedidos({ showToast, irPara }) {
           obterClientes().then(c => { setClientes(c.clientes); setGrupos(c.grupos ?? []) }),
         ])
         setCarregando(false)
-        api('/pedidos?recurso=formasPagamento').then(f => setFormas(f.formas)).catch(() => {})
+        obterFormasPagamento().then(setFormas).catch(() => {})
         if (!r.ultimaSincronizacao) await sincronizar({ completo: true })
         else if (Date.now() - r.ultimaSincronizacao > 30 * 60 * 1000) await sincronizar({ silencioso: true })
       } catch (err) { showToast(err.message, 'error'); setCarregando(false) }

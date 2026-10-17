@@ -3,12 +3,13 @@ import { useNavigate, Link } from 'react-router-dom'
 import { gerarCatalogoPDF } from '../../utils/gerarPDF.js'
 import { visivelNoSite } from '../../utils/produtos.js'
 import { useRascunho, limparRascunhos } from '../../hooks/useRascunho.js'
-import { api } from '../../lib/api.js'
+import { api, avisarManutencao } from '../../lib/api.js'
 import { limparCacheDados } from '../../lib/dados.js'
 import SecaoClientes from './Clientes.jsx'
 import SecaoCriarPedido from './CriarPedido.jsx'
 import SecaoPedidos from './Pedidos.jsx'
 import SecaoInicio from './Inicio.jsx'
+import StatusConexao from './StatusConexao.jsx'
 import VinculoBling from './VinculoBling.jsx'
 import { auth, db } from '../../lib/firebase.js'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
@@ -771,6 +772,13 @@ export default function Dashboard() {
     window.history.replaceState(null, '', window.location.pathname)
   }, [])
 
+  // Cota do Firestore esgotada → faixa de manutenção; demais erros → aviso comum
+  function avisoFalha(err, msg) {
+    if (err?.code === 'resource-exhausted' || err?.code === 'unavailable') {
+      if (navigator.onLine) avisarManutencao(true)
+    } else showToast(msg, 'error')
+  }
+
   async function loadProdutos() {
     setLoading(true)
     try {
@@ -780,7 +788,7 @@ export default function Dashboard() {
       try {
         const snap = await getDocs(collection(db, 'produtos'))
         setProdutos(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-      } catch { showToast('Erro ao carregar produtos.', 'error') }
+      } catch (err) { avisoFalha(err, 'Erro ao carregar produtos.') }
     } finally { setLoading(false) }
   }
 
@@ -792,7 +800,7 @@ export default function Dashboard() {
       try {
         const snap = await getDocs(collection(db, 'slider'))
         setSlides(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-      } catch { showToast('Erro ao carregar slider.', 'error') }
+      } catch (err) { avisoFalha(err, 'Erro ao carregar slider.') }
     }
   }
 
@@ -869,6 +877,7 @@ export default function Dashboard() {
           <span className="font-semibold text-sm hidden sm:block">Painel Administrativo</span>
         </div>
         <div className="flex items-center gap-2">
+          <StatusConexao showToast={showToast} irPara={setActiveSection} />
           <span className="text-xs text-white/60 hidden lg:block truncate max-w-50">{userEmail}</span>
           <Link to="/" target="_blank" rel="noopener noreferrer"
                 className="hidden sm:flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg text-xs transition-colors text-white">

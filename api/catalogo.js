@@ -43,6 +43,6 @@ export default async function handler(req, res) {
     console.error(err)
     // Não guarda erro em cache
     res.setHeader('Cache-Control', 'no-store')
-    res.status(500).json({ erro: 'Não foi possível carregar o catálogo.' })
+    res.status(503).json({ erro: 'Site em manutenção. Tente novamente em alguns minutos.', manutencao: true })
   }
 }

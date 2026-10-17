@@ -111,7 +111,8 @@ export default function Produtos() {
           )}
           {!loading && erro && (
             <p className="text-center text-dark-brown py-16">
-              Erro ao carregar produtos. Tente novamente.
+              Estamos em manutenção e não conseguimos carregar os produtos agora.
+              Tente novamente em alguns minutos ou fale com a gente pelo WhatsApp.
             </p>
           )}
           {!loading && !erro && produtos.length === 0 && (

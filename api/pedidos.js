@@ -99,6 +99,16 @@ function corpoBling(p) {
 }
 
 async function criarPedido(p, usuario) {
+  // Chave única gerada no navegador: se o envio for repetido (fila offline, conexão caiu
+  // no meio), devolve o pedido já criado em vez de criar outro no Bling
+  const chave = typeof p?.chave === 'string' && p.chave.length >= 8 ? p.chave : null
+  if (chave) {
+    const existente = await colPedidos().where('chave', '==', chave).limit(1).get()
+    if (!existente.empty) {
+      const d = existente.docs[0].data()
+      return { id: existente.docs[0].id, numero: d.numero ?? null, total: d.total, repetido: true }
+    }
+  }
   const { itens, total, prazo, entrega, corpo } = corpoBling(p)
   corpo.data = dataISO()
 
@@ -110,7 +120,7 @@ async function criarPedido(p, usuario) {
   }
 
   await colPedidos().doc(id).set({
-    blingId: id, numero, situacao: 'aberto', situacaoNome: 'Em aberto',
+    blingId: id, numero, situacao: 'aberto', situacaoNome: 'Em aberto', chave,
     cliente: resumoCliente(p.cliente),
     itens, total, obs: corpo.observacoes,
     formaPagamentoId: String(p.formaPagamentoId), prazoDias: prazo, dataEntrega: entrega,
@@ -220,7 +230,10 @@ async function salvarOrcamento(o, usuario) {
   const nomeCliente = (o?.cliente?.nome || o?.clienteNome || '').trim()
   if (!nomeCliente) throw new HttpError(400, 'Informe o cliente do orçamento.')
   const itens = validarItens(o.itens)
-  const ref = o.id ? colOrcamentos().doc(String(o.id)) : colOrcamentos().doc()
+  // Orçamento novo usa a chave do navegador como id: reenviar não duplica
+  const novoId = typeof o.chave === 'string' && o.chave.length >= 8 ? o.chave : null
+  const ref = o.id ? colOrcamentos().doc(String(o.id)) : novoId ? colOrcamentos().doc(novoId) : colOrcamentos().doc()
+  const jaExiste = !o.id && novoId ? (await ref.get()).exists : false
   const dados = {
     cliente: o.cliente?.id ? resumoCliente(o.cliente)
                            : { id: null, nome: nomeCliente, apelido: '', numeroDocumento: o.clienteDocumento ?? '', grupoId: null },
@@ -234,7 +247,7 @@ async function salvarOrcamento(o, usuario) {
     atualizadoEm: FieldValue.serverTimestamp(),
     atualizadoPor: usuario.email,
   }
-  if (!o.id) { dados.criadoEm = FieldValue.serverTimestamp(); dados.criadoPor = usuario.email }
+  if (!o.id && !jaExiste) { dados.criadoEm = FieldValue.serverTimestamp(); dados.criadoPor = usuario.email }
   await ref.set(dados, { merge: true })
   return { id: ref.id, total: dados.total }
 }
