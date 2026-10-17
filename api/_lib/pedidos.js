@@ -2,12 +2,15 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb } from './firebaseAdmin.js'
 import { blingFetch } from './bling.js'
 import { HttpError } from './auth.js'
+import { impressao } from './clientes.js'
 
 // Cópia local dos pedidos de venda do Bling (listas, filtros e PDFs rápidos)
 export const colPedidos    = () => adminDb.collection('pedidos')
 export const colOrcamentos = () => adminDb.collection('orcamentos')
 const metaDoc       = () => adminDb.collection('integracoes').doc('pedidosSync')
 const situacoesDoc  = () => adminDb.collection('integracoes').doc('situacoesVendas')
+// "Impressão digital" de cada pedido já gravado: a sincronização só grava o que mudou
+const hashDoc       = () => adminDb.collection('integracoes').doc('pedidosHash')
 
 export const esperar = ms => new Promise(r => setTimeout(r, ms))
 
@@ -176,14 +179,23 @@ export async function sincronizarPedidos({ completo = false, limiteDetalhes = 25
   const desde = !completo && meta?.ultimaEm ? meta.ultimaEm - 10 * 60 * 1000 : null
   const situacoes = await situacoesVendas(completo)
 
+  const hashes = completo ? {} : ((await hashDoc().get()).data()?.h ?? {})
+  const novosHashes = {}
   const alterados = []
   for (let pagina = 1; pagina <= 50; pagina++) {
     const { data = [] } = await blingFetch('/pedidos/vendas', {
       query: { pagina, limite: 100, dataAlteracaoInicial: desde ? dataHoraBling(desde) : undefined },
     })
-    if (data.length) {
+    const mudaram = data.filter(p => {
+      const { sincronizadoEm, atualizadoEm, ...campos } = paraCache(p, situacoes)
+      const h = impressao(campos)
+      if (hashes[String(p.id)] === h) return false
+      novosHashes[String(p.id)] = h
+      return true
+    })
+    if (mudaram.length) {
       const batch = adminDb.batch()
-      data.forEach(p => {
+      mudaram.forEach(p => {
         batch.set(colPedidos().doc(String(p.id)), paraCache(p, situacoes), { merge: true })
         alterados.push(String(p.id))
       })
@@ -206,6 +218,9 @@ export async function sincronizarPedidos({ completo = false, limiteDetalhes = 25
     await batch.commit()
   }
 
+  if (Object.keys(novosHashes).length) {
+    await hashDoc().set({ h: { ...hashes, ...novosHashes } }, completo ? {} : { merge: true })
+  }
   await metaDoc().set({ ultimaEm: inicio }, { merge: true })
   return { total: alterados.length, detalhados, ultimaEm: inicio }
 }

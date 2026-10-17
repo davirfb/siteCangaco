@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb } from './firebaseAdmin.js'
 import { blingFetch } from './bling.js'
@@ -8,6 +9,10 @@ export const colClientes = () => adminDb.collection('clientes')
 // Grupos (redes de filiais) e destaques existem só no site
 export const colGrupos   = () => adminDb.collection('grupos_clientes')
 const metaDoc = () => adminDb.collection('integracoes').doc('clientesSync')
+// "Impressão digital" de cada contato já gravado: a sincronização só grava o que mudou
+const hashDoc = () => adminDb.collection('integracoes').doc('clientesHash')
+
+export const impressao = obj => createHash('md5').update(JSON.stringify(obj)).digest('base64').slice(0, 12)
 
 const esperar = ms => new Promise(r => setTimeout(r, ms))
 
@@ -51,21 +56,35 @@ export async function sincronizarClientes({ completo = false } = {}) {
   const meta = (await metaDoc().get()).data()
   const desde = !completo && meta?.ultimaEm ? meta.ultimaEm - 10 * 60 * 1000 : null
 
+  const hashes = completo ? {} : ((await hashDoc().get()).data()?.h ?? {})
+  const novosHashes = {}
+
   let pagina = 1
   let total = 0
   while (true) {
     const { data = [] } = await blingFetch('/contatos', {
       query: { pagina, limite: 100, criterio: 1, dataAlteracaoInicial: desde ? dataBling(desde) : undefined },
     })
-    if (data.length) {
+    const mudaram = data.filter(c => {
+      const { sincronizadoEm, atualizadoEm, ...campos } = paraCache(c)
+      const h = impressao(campos)
+      if (hashes[String(c.id)] === h) return false
+      novosHashes[String(c.id)] = h
+      return true
+    })
+    if (mudaram.length) {
       const batch = adminDb.batch()
-      data.forEach(c => batch.set(colClientes().doc(String(c.id)), paraCache(c), { merge: true }))
+      mudaram.forEach(c => batch.set(colClientes().doc(String(c.id)), paraCache(c), { merge: true }))
       await batch.commit()
-      total += data.length
+      total += mudaram.length
     }
     if (data.length < 100) break
     pagina++
     await esperar(350) // limite do Bling: 3 requisições por segundo
+  }
+
+  if (Object.keys(novosHashes).length) {
+    await hashDoc().set({ h: { ...hashes, ...novosHashes } }, completo ? {} : { merge: true })
   }
 
   await metaDoc().set({ ultimaEm: inicio, ...(completo || !meta?.ultimaEm ? { completaEm: inicio } : {}) }, { merge: true })
