@@ -515,8 +515,13 @@ export default function SecaoPedidos({ showToast, irPara, produtos = [] }) {
   const [aba,      setAba]      = useRascunho('admin:pedidos:aba', 'abertos')
   const [busca,    setBusca]    = useRascunho('admin:pedidos:busca', '')
   const [filtroCli, setFiltroCli] = useRascunho('admin:pedidos:clientes', [])
-  const [de,       setDe]       = useRascunho('admin:pedidos:de', hojeISO(-30))
-  const [ate,      setAte]      = useRascunho('admin:pedidos:ate', hojeISO())
+  // Período do Histórico: vazio = padrão (últimos 30 dias até hoje), recalculado todo dia.
+  // Só fica salvo o que o usuário escolher de propósito.
+  const [deEscolhido,  setDe]  = useRascunho('admin:pedidos:periodoDe', '')
+  const [ateEscolhido, setAte] = useRascunho('admin:pedidos:periodoAte', '')
+  const de  = deEscolhido  || hojeISO(-30)
+  const ate = ateEscolhido || hojeISO()
+  const periodoPadrao = !deEscolhido && !ateEscolhido
   const [filtroSit, setFiltroSit] = useRascunho('admin:pedidos:situacao', 'todos')
   const [verConvertidos, setVerConvertidos] = useRascunho('admin:pedidos:convertidos', false)
   const [selecionados, setSelecionados] = useRascunho('admin:pedidos:selecionados', [])
@@ -756,6 +761,9 @@ export default function SecaoPedidos({ showToast, irPara, produtos = [] }) {
           <input type="date" value={de} onChange={e => setDe(e.target.value)} className="px-2 py-1.5 border-2 border-gray-200 rounded-lg text-sm bg-white" />
           <label className="text-xs text-gray-500">até</label>
           <input type="date" value={ate} onChange={e => setAte(e.target.value)} className="px-2 py-1.5 border-2 border-gray-200 rounded-lg text-sm bg-white" />
+          {periodoPadrao
+            ? <span className="text-xs text-gray-400">(últimos 30 dias)</span>
+            : <button onClick={() => { setDe(''); setAte('') }} className="text-xs font-semibold text-primary hover:underline cursor-pointer bg-transparent border-none">Voltar para os últimos 30 dias</button>}
           <select value={filtroSit} onChange={e => setFiltroSit(e.target.value)} className="px-2 py-1.5 border-2 border-gray-200 rounded-lg text-sm bg-white">
             <option value="todos">Todas as situações</option>
             <option value="aberto">Em aberto</option>
