@@ -722,10 +722,18 @@ export default function SecaoPedidos({ showToast, irPara, produtos = [] }) {
           <h2 className="text-xl font-bold text-text-dark">Pedidos</h2>
           <p className="text-sm text-gray-400 mt-0.5">{qtdAbertos} em aberto · sincronizado com o Bling em {fmtData(ultimaSync)}</p>
         </div>
-        <button onClick={() => sincronizar()} disabled={sincronizando} className={btnSec}>
-          <i className={`fas fa-sync-alt ${sincronizando ? 'fa-spin' : ''}`}></i>
-          <span className="hidden sm:inline">{sincronizando ? 'Sincronizando…' : 'Sincronizar'}</span>
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          <button onClick={() => sincronizar()} disabled={sincronizando} className={btnSec}>
+            <i className={`fas fa-sync-alt ${sincronizando ? 'fa-spin' : ''}`}></i>
+            <span className="hidden sm:inline">{sincronizando ? 'Sincronizando…' : 'Sincronizar'}</span>
+          </button>
+          {/* Relê todos os pedidos do Bling (corrige pedidos faltando ou desatualizados) */}
+          <button onClick={() => { if (window.confirm('Fazer a sincronização completa? Todos os pedidos serão relidos do Bling (pode levar até 1 minuto).')) sincronizar({ completo: true }) }}
+                  disabled={sincronizando}
+                  className="text-xs text-gray-400 hover:text-primary cursor-pointer bg-transparent border-none disabled:opacity-50">
+            Sincronização completa
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-4 overflow-x-auto max-w-full">

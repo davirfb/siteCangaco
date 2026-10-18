@@ -4,7 +4,7 @@ import { blingFetch } from './_lib/bling.js'
 import {
   colPedidos, colOrcamentos, esperar, situacoesVendas, classificar, idSituacao,
   detalharPedido, sincronizarPedidos, ultimaSincronizacaoPedidos, lerNota, notaAutorizada, avisarNota, MARCA_SITE,
-  pedidoSumiu, marcarExcluido,
+  marcarExcluido, pedidoExisteNoBling,
 } from './_lib/pedidos.js'
 import { avisarUmaVez, nomeUsuario } from './_lib/notificar.js'
 
@@ -303,12 +303,17 @@ export default rota(['GET', 'POST'], async (req, res) => {
   try {
     return await executar(b, usuario, res)
   } catch (err) {
-    // Pedido excluído direto no Bling: some da lista do site
-    if (b.id && pedidoSumiu(err, b.id)) {
-      await marcarExcluido(b.id)
-      const e = new HttpError(410, 'Este pedido não existe mais no Bling (foi excluído lá). Ele foi removido da lista.')
-      e.excluido = true
-      throw e
+    // "Não encontrado" numa ação sobre um pedido: confere se o pedido foi mesmo excluído no Bling
+    if (b.id && err?.status === 404 && String(err.caminho ?? '').startsWith(`/pedidos/vendas/${b.id}`)) {
+      if (!(await pedidoExisteNoBling(b.id))) {
+        await marcarExcluido(b.id)
+        const e = new HttpError(410, 'Este pedido não existe mais no Bling (foi excluído lá). Ele foi removido da lista.')
+        e.excluido = true
+        throw e
+      }
+      if (String(err.caminho).includes('/situacoes/')) {
+        throw new HttpError(409, 'O Bling não reconheceu a situação escolhida. Adicione o escopo "Situações" no aplicativo Site Cangaço (Bling → Área do Integrador) e reconecte.')
+      }
     }
     throw err
   }

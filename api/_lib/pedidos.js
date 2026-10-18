@@ -97,6 +97,8 @@ function paraCache(p, situacoes) {
       nome:            p.contato?.nome ?? '',
       numeroDocumento: (p.contato?.numeroDocumento ?? '').replace(/\D/g, ''),
     },
+    // veio do Bling, então existe (desfaz marcação de excluído feita por engano)
+    excluido:       false,
     sincronizadoEm: FieldValue.serverTimestamp(),
     // usado pelo navegador para buscar só o que mudou
     atualizadoEm:   FieldValue.serverTimestamp(),
@@ -124,8 +126,15 @@ export async function lerNota(tipo, id) {
 }
 
 // Ficha completa do pedido (itens, parcelas, nota) → cópia local
-// O pedido foi excluído no Bling? (404 ao consultar o próprio pedido)
-export const pedidoSumiu = (err, id) => err?.status === 404 && String(err.caminho ?? '').startsWith(`/pedidos/vendas/${id}`)
+// O pedido foi excluído no Bling? Só vale o 404 da consulta do PRÓPRIO pedido
+// (GET /pedidos/vendas/{id}); 404 em ações (situação, gerar nota) tem outros motivos.
+export const pedidoSumiu = (err, id) => err?.status === 404 && String(err.caminho ?? '').split('?')[0] === `/pedidos/vendas/${id}`
+
+// Confirma no Bling se o pedido ainda existe
+export async function pedidoExisteNoBling(id) {
+  try { await blingFetch(`/pedidos/vendas/${id}`); return true }
+  catch (err) { if (pedidoSumiu(err, id)) return false; throw err }
+}
 
 // Marca a cópia local como excluída (em vez de apagar, para o cache dos navegadores também saber)
 export async function marcarExcluido(id) {
