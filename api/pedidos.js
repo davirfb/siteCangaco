@@ -3,8 +3,10 @@ import { rota, exigirAdmin, HttpError } from './_lib/auth.js'
 import { blingFetch } from './_lib/bling.js'
 import {
   colPedidos, colOrcamentos, esperar, situacoesVendas, classificar, idSituacao,
-  detalharPedido, sincronizarPedidos, ultimaSincronizacaoPedidos, lerNota, notaAutorizada,
+  detalharPedido, sincronizarPedidos, ultimaSincronizacaoPedidos, lerNota, notaAutorizada, avisarNota, MARCA_SITE,
+  pedidoSumiu, marcarExcluido,
 } from './_lib/pedidos.js'
+import { avisarUmaVez, nomeUsuario } from './_lib/notificar.js'
 
 // Pedidos vão para o Bling (com cópia no Firestore para listas rápidas).
 // Orçamentos ficam só no site.
@@ -56,6 +58,8 @@ function validarItens(itens) {
     return { ...it, quantidade, precoUnitario: valor }
   })
 }
+
+const brl = v => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`
 
 const totalDe = itens => Math.round(itens.reduce((acc, it) => acc + it.quantidade * it.precoUnitario, 0) * 100) / 100
 
@@ -111,6 +115,7 @@ async function criarPedido(p, usuario) {
   }
   const { itens, total, prazo, entrega, corpo } = corpoBling(p)
   corpo.data = dataISO()
+  corpo.observacoesInternas = MARCA_SITE
 
   const { data } = await blingFetch('/pedidos/vendas', { method: 'POST', body: corpo })
   const id = String(data.id)
@@ -129,6 +134,15 @@ async function criarPedido(p, usuario) {
     atualizadoEm: FieldValue.serverTimestamp(),
   }, { merge: true })
   if (p.orcamentoId) await colOrcamentos().doc(String(p.orcamentoId)).set({ convertidoEm: id, convertidoNumero: numero }, { merge: true })
+
+  // Avisa os outros admins
+  const nomeCli = p.cliente.apelido || p.cliente.nome || 'cliente'
+  await avisarUmaVez(`pedido-${id}`, {
+    titulo: '🛍️ Novo pedido',
+    corpo: `${nomeUsuario(usuario)} criou o pedido nº ${numero ?? ''} – ${nomeCli} (${brl(total)})`,
+    excetoEmail: usuario.email,
+    tag: `pedido-${id}`,
+  })
   return { id, numero, total }
 }
 
@@ -199,9 +213,10 @@ async function gerarNota(id, tipo) {
   return { nota: nova, naturezaNome }
 }
 
-async function enviarNota(id) {
+async function enviarNota(id, usuario) {
   const ref = colPedidos().doc(String(id))
-  const nota = (await ref.get()).data()?.nota
+  const doc = (await ref.get()).data()
+  const nota = doc?.nota
   if (!nota?.id) throw new HttpError(409, 'Gere a nota antes de enviar.')
   if (notaAutorizada(nota.situacao)) return { nota }
 
@@ -212,16 +227,19 @@ async function enviarNota(id) {
 
   const atualizada = await lerNota(nota.tipo, nota.id)
   await ref.set({ nota: atualizada, atualizadoEm: FieldValue.serverTimestamp() }, { merge: true })
+  await avisarNota(atualizada, doc, usuario?.email)
   if (erroEnvio && !notaAutorizada(atualizada.situacao)) throw erroEnvio
   return { nota: atualizada }
 }
 
-async function consultarNota(id) {
+async function consultarNota(id, usuario) {
   const ref = colPedidos().doc(String(id))
-  const nota = (await ref.get()).data()?.nota
+  const doc = (await ref.get()).data()
+  const nota = doc?.nota
   if (!nota?.id) throw new HttpError(404, 'Este pedido não tem nota.')
   const atualizada = await lerNota(nota.tipo, nota.id)
   await ref.set({ nota: atualizada, atualizadoEm: FieldValue.serverTimestamp() }, { merge: true })
+  await avisarNota(atualizada, doc, usuario?.email)
   return { nota: atualizada }
 }
 
@@ -282,6 +300,21 @@ export default rota(['GET', 'POST'], async (req, res) => {
   }
 
   const b = req.body ?? {}
+  try {
+    return await executar(b, usuario, res)
+  } catch (err) {
+    // Pedido excluído direto no Bling: some da lista do site
+    if (b.id && pedidoSumiu(err, b.id)) {
+      await marcarExcluido(b.id)
+      const e = new HttpError(410, 'Este pedido não existe mais no Bling (foi excluído lá). Ele foi removido da lista.')
+      e.excluido = true
+      throw e
+    }
+    throw err
+  }
+})
+
+async function executar(b, usuario, res) {
   switch (b.acao) {
     case 'criar':            return res.json(await criarPedido(b.pedido, usuario))
     case 'editar':           return res.json(await editarPedido(b.id, b.pedido, usuario))
@@ -289,12 +322,13 @@ export default rota(['GET', 'POST'], async (req, res) => {
     case 'sincronizar':      return res.json(await sincronizarPedidos({ completo: !!b.completo }))
     case 'detalhes':         return res.json({ pedidos: await detalhes(b.ids) })
     case 'nota_gerar':       return res.json(await gerarNota(b.id, b.tipo))
-    case 'nota_enviar':      return res.json(await enviarNota(b.id))
-    case 'nota_consultar':   return res.json(await consultarNota(b.id))
+    case 'nota_enviar':      return res.json(await enviarNota(b.id, usuario))
+    case 'nota_consultar':   return res.json(await consultarNota(b.id, usuario))
     case 'orcamento_salvar': return res.json(await salvarOrcamento(b.orcamento, usuario))
     case 'orcamento_excluir':
       await colOrcamentos().doc(String(b.id)).delete()
       return res.json({ ok: true })
     default: throw new HttpError(400, 'Ação inválida.')
   }
-})
+}
+

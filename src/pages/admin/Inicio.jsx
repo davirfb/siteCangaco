@@ -37,6 +37,13 @@ export default function SecaoInicio({ showToast, irPara }) {
     return r
   }
 
+  // Algum pedido foi excluído no Bling: recarrega (ele vem marcado e sai da lista)
+  useEffect(() => {
+    const recarregar = () => { carregar().catch(() => {}) }
+    window.addEventListener('cangaco:pedidosMudaram', recarregar)
+    return () => window.removeEventListener('cangaco:pedidosMudaram', recarregar)
+  }, [])
+
   useEffect(() => {
     (async () => {
       try {
@@ -72,11 +79,12 @@ export default function SecaoInicio({ showToast, irPara }) {
   ativos.forEach(p => { const d = entrega(p); if (d) (porDia[d] ??= []).push(p) })
   Object.values(porDia).forEach(l => l.sort((a, b) => (a.numero ?? 0) - (b.numero ?? 0)))
 
-  const abertos   = ativos.filter(p => p.situacao === 'aberto')
-  const atrasados = abertos.filter(p => entrega(p) && entrega(p) < hj).sort((a, b) => entrega(a).localeCompare(entrega(b)))
-  const deHoje    = abertos.filter(p => entrega(p) === hj)
-  const amanha    = abertos.filter(p => entrega(p) === somaDias(hj, 1))
+  // Pedidos em aberto pela data de entrega (atrasados primeiro)
+  const abertos = ativos
+    .filter(p => p.situacao === 'aberto')
+    .sort((a, b) => entrega(a).localeCompare(entrega(b)) || (a.numero ?? 0) - (b.numero ?? 0))
   const totalAberto = abertos.reduce((a, p) => a + Number(p.total || 0), 0)
+  const rotuloEntrega = d => !d ? 'sem data' : d < hj ? `atrasado · ${dataCurta(d)}` : d === hj ? 'hoje' : d === somaDias(hj, 1) ? 'amanhã' : dataCurta(d)
 
   // Dias exibidos na agenda
   let dias, titulo
@@ -102,28 +110,23 @@ export default function SecaoInicio({ showToast, irPara }) {
     setDiaSel(null)
   }
 
-  const Card = ({ icone, cor, rotulo, valor, sub }) => (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${cor}`}><i className={`fas ${icone}`}></i></div>
-      <div className="min-w-0">
-        <p className="text-[11px] text-gray-400 uppercase tracking-wide">{rotulo}</p>
-        <p className="text-xl font-bold text-text-dark leading-tight">{valor}</p>
-        {sub && <p className="text-xs text-gray-400 truncate">{sub}</p>}
-      </div>
-    </div>
-  )
-
   const LinhaPedido = ({ p, mostrarData }) => {
     const i = info(p)
+    const d = entrega(p)
+    const atrasado = p.situacao === 'aberto' && d && d < hj
     return (
       <button onClick={() => abrir(p)}
-              className="w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer bg-transparent border-none hover:bg-orange-50/60">
-        <span className={`w-2 h-2 rounded-full shrink-0 ${p.situacao === 'concluido' ? 'bg-green-500' : 'bg-orange-500'}`}></span>
+              className={`w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer border-none hover:bg-orange-50/60 ${atrasado ? 'bg-red-50/60' : 'bg-transparent'}`}>
+        <span className={`w-2 h-2 rounded-full shrink-0 ${atrasado ? 'bg-red-500' : p.situacao === 'concluido' ? 'bg-green-500' : 'bg-orange-500'}`}></span>
         <span className="flex-1 min-w-0">
           <span className="block text-sm font-semibold text-text-dark truncate">nº {p.numero ?? '—'} · {i.nome}</span>
           {i.destaques.length > 0 && <span className="block text-[11px] text-yellow-700 truncate"><i className="fas fa-star mr-1"></i>{i.destaques.join(' · ')}</span>}
         </span>
-        {mostrarData && <span className="text-xs text-gray-400 shrink-0">{dataCurta(entrega(p))}</span>}
+        {mostrarData && (
+          <span className={`text-xs shrink-0 ${atrasado ? 'text-red-600 font-semibold' : d === hj ? 'text-primary font-semibold' : 'text-gray-400'}`}>
+            {rotuloEntrega(d)}
+          </span>
+        )}
         <span className="text-sm font-bold text-primary shrink-0">{brl(p.total)}</span>
       </button>
     )
@@ -159,22 +162,16 @@ export default function SecaoInicio({ showToast, irPara }) {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card icone="fa-exclamation-triangle" cor="bg-red-100 text-red-600" rotulo="Atrasados" valor={atrasados.length}
-              sub={atrasados.length ? brl(atrasados.reduce((a, p) => a + Number(p.total || 0), 0)) : 'nenhum'} />
-        <Card icone="fa-truck" cor="bg-orange-100 text-primary" rotulo="Entregas hoje" valor={deHoje.length}
-              sub={deHoje.length ? brl(deHoje.reduce((a, p) => a + Number(p.total || 0), 0)) : 'nenhuma'} />
-        <Card icone="fa-calendar-day" cor="bg-blue-100 text-blue-600" rotulo="Amanhã" valor={amanha.length}
-              sub={amanha.length ? brl(amanha.reduce((a, p) => a + Number(p.total || 0), 0)) : 'nenhuma'} />
-        <Card icone="fa-clipboard-list" cor="bg-green-100 text-green-700" rotulo="Em aberto" valor={abertos.length} sub={brl(totalAberto)} />
-      </div>
-
-      {atrasados.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border-2 border-red-100 overflow-hidden">
-          <p className="px-4 py-2.5 bg-red-50 text-sm font-bold text-red-700"><i className="fas fa-exclamation-triangle mr-2"></i>Entregas atrasadas (ainda em aberto)</p>
-          <div className="divide-y divide-gray-100">{atrasados.map(p => <LinhaPedido key={p.id} p={p} mostrarData />)}</div>
+      {/* Pedidos em aberto */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+          <p className="font-bold text-text-dark"><i className="fas fa-clipboard-list text-primary mr-2"></i>Pedidos em aberto ({abertos.length})</p>
+          <p className="text-sm font-bold text-primary">{brl(totalAberto)}</p>
         </div>
-      )}
+        {abertos.length === 0
+          ? <p className="px-4 py-6 text-sm text-gray-400 text-center">Nenhum pedido em aberto.</p>
+          : <div className="divide-y divide-gray-100">{abertos.map(p => <LinhaPedido key={p.id} p={p} mostrarData />)}</div>}
+      </div>
 
       {/* Agenda */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">

@@ -13,7 +13,7 @@ const firebaseConfig = {
   measurementId:     'G-WE0RGZFQFL',
 }
 
-const app = initializeApp(firebaseConfig)
+export const app = initializeApp(firebaseConfig)
 
 export const auth    = getAuth(app)
 // Cache local (IndexedDB): o painel mostra o catálogo mesmo sem internet

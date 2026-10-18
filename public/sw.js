@@ -4,7 +4,7 @@
 // - Fontes e ícones (CDN) e fotos do Cloudinary: usa a cópia e atualiza em segundo plano.
 // - /api e Firebase: nunca passam pelo cache (dados ficam a cargo do app).
 
-const VERSAO = 'cangaco-v1'
+const VERSAO = 'cangaco-v2'
 const SHELL = ['/', '/index.html']
 
 self.addEventListener('install', e => {
@@ -64,4 +64,32 @@ self.addEventListener('fetch', e => {
       }))
     )
   }
+})
+
+// ── Notificações (Firebase Cloud Messaging, mensagens só de dados) ──
+self.addEventListener('push', e => {
+  let msg = {}
+  try { msg = e.data?.json() ?? {} } catch {}
+  const d = msg.data ?? msg
+  const titulo = d.titulo || 'Cangaço'
+  e.waitUntil(self.registration.showNotification(titulo, {
+    body:  d.corpo || '',
+    icon:  '/img/favicon_io/android-chrome-192x192.png',
+    badge: '/img/favicon_io/favicon-32x32.png',
+    tag:   d.tag || undefined,
+    data:  { url: d.url || '/admin/dashboard' },
+  }))
+})
+
+// Ao tocar na notificação: foca o painel aberto ou abre um novo
+self.addEventListener('notificationclick', e => {
+  e.notification.close()
+  const url = e.notification.data?.url || '/admin/dashboard'
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(janelas => {
+      const aberta = janelas.find(j => new URL(j.url).pathname.startsWith('/admin'))
+      if (aberta) return aberta.focus()
+      return self.clients.openWindow(url)
+    })
+  )
 })

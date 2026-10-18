@@ -1,6 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb } from './firebaseAdmin.js'
 import { HttpError } from './auth.js'
+import { avisarUmaVez } from './notificar.js'
 
 const API_URL       = 'https://api.bling.com.br/Api/v3'
 const AUTHORIZE_URL = 'https://www.bling.com.br/Api/v3/oauth/authorize'
@@ -84,6 +85,13 @@ export async function renovar(conexaoAtual) {
     if (err.tokenInvalido) {
       const recente = await lerConexao()
       if (recente && recente.refreshToken !== conexao.refreshToken) return recente
+      // Avisa os admins (no máximo uma vez por dia)
+      const dia = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+      await avisarUmaVez(`bling-expirou-${dia}`, {
+        titulo: '🔌 Conexão com o Bling expirou',
+        corpo: 'Abra o painel → Bling → Reconectar para voltar a criar pedidos e notas.',
+        tag: 'bling-conexao',
+      })
       throw new HttpError(409, 'A conexão com o Bling expirou. Conecte novamente.')
     }
     throw err
@@ -133,7 +141,9 @@ export async function blingFetch(caminho, { method = 'GET', body, query } = {}) 
         throw err
       }
       const detalhes = e?.fields?.map(f => f.msg).filter(Boolean).join(' ')
-      throw new HttpError(resp.status >= 500 ? 502 : resp.status, `Bling: ${e?.description || e?.message || `HTTP ${resp.status}`}${detalhes ? ` — ${detalhes}` : ''}`)
+      const erro = new HttpError(resp.status >= 500 ? 502 : resp.status, `Bling: ${e?.description || e?.message || `HTTP ${resp.status}`}${detalhes ? ` — ${detalhes}` : ''}`)
+      erro.caminho = caminho
+      throw erro
     }
     return dados
   }

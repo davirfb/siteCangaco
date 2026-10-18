@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { lerFila, processarFila, removerDaFila, liberarParaReenvio } from '../../lib/filaOffline.js'
 import { abrirNoCriarPedido } from './CriarPedido.jsx'
+import { notificarLocal } from '../../lib/notificacoes.js'
 
 const brl = v => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`
 
@@ -21,12 +22,20 @@ export default function StatusConexao({ showToast, irPara }) {
     const on  = () => { setOnline(true); enviar() }
     const off = () => setOnline(false)
     const mudouFila = e => setFila(e.detail)
-    const enviados = e => e.detail.forEach(({ item, r }) =>
-      showToast(r?.numero ? `${item.resumo?.tipo ?? 'Pedido'} enviado ao Bling: nº ${r.numero}` : `${item.resumo?.tipo ?? 'Item'} de ${item.resumo?.cliente ?? ''} enviado.`))
+    const enviados = e => e.detail.forEach(({ item, r }) => {
+      const msg = r?.numero ? `${item.resumo?.tipo ?? 'Pedido'} enviado ao Bling: nº ${r.numero} – ${item.resumo?.cliente ?? ''}` : `${item.resumo?.tipo ?? 'Item'} de ${item.resumo?.cliente ?? ''} enviado.`
+      showToast(msg)
+      notificarLocal('☁️ Fila offline enviada', msg, `fila-${item.id}`)
+    })
+    const comErro = e => {
+      const { item, erro } = e.detail
+      notificarLocal('⚠️ Pedido da fila não foi enviado', `${item.resumo?.tipo ?? 'Item'} de ${item.resumo?.cliente ?? ''}: ${erro}`, `fila-${item.id}`)
+    }
     window.addEventListener('online', on)
     window.addEventListener('offline', off)
     window.addEventListener('cangaco:fila', mudouFila)
     window.addEventListener('cangaco:filaEnviada', enviados)
+    window.addEventListener('cangaco:filaErro', comErro)
     enviar()
     // Se algo ficou na fila (ex.: servidor em manutenção), tenta de novo a cada minuto
     const t = setInterval(() => { if (lerFila().some(i => !i.erro)) enviar() }, 60000)
@@ -35,6 +44,7 @@ export default function StatusConexao({ showToast, irPara }) {
       window.removeEventListener('offline', off)
       window.removeEventListener('cangaco:fila', mudouFila)
       window.removeEventListener('cangaco:filaEnviada', enviados)
+      window.removeEventListener('cangaco:filaErro', comErro)
       clearInterval(t)
     }
   }, [])

@@ -3,6 +3,10 @@ import { adminDb } from './firebaseAdmin.js'
 import { blingFetch } from './bling.js'
 import { HttpError } from './auth.js'
 import { impressao } from './clientes.js'
+import { avisarUmaVez } from './notificar.js'
+
+// Marca nos pedidos criados pelo site (observação interna no Bling): o webhook não avisa de novo
+export const MARCA_SITE = 'Criado pelo site Cangaço'
 
 // Cópia local dos pedidos de venda do Bling (listas, filtros e PDFs rápidos)
 export const colPedidos    = () => adminDb.collection('pedidos')
@@ -115,15 +119,31 @@ export async function lerNota(tipo, id) {
     valor:         data.valorNota ?? null,
     naturezaOperacao: data.naturezaOperacao?.id ? String(data.naturezaOperacao.id) : null,
     dataEmissao:   data.dataEmissao ?? null,
+    contatoNome:   data.contato?.nome ?? '',
   }
 }
 
 // Ficha completa do pedido (itens, parcelas, nota) → cópia local
+// O pedido foi excluído no Bling? (404 ao consultar o próprio pedido)
+export const pedidoSumiu = (err, id) => err?.status === 404 && String(err.caminho ?? '').startsWith(`/pedidos/vendas/${id}`)
+
+// Marca a cópia local como excluída (em vez de apagar, para o cache dos navegadores também saber)
+export async function marcarExcluido(id) {
+  await colPedidos().doc(String(id)).set({ excluido: true, situacao: 'excluido', atualizadoEm: FieldValue.serverTimestamp() }, { merge: true })
+}
+
 export async function detalharPedido(id) {
   const ref = colPedidos().doc(String(id))
-  const [{ data: p }, situacoes, atual] = await Promise.all([
-    blingFetch(`/pedidos/vendas/${id}`), situacoesVendas(), ref.get(),
-  ])
+  let p, situacoes, atual
+  try {
+    [{ data: p }, situacoes, atual] = await Promise.all([
+      blingFetch(`/pedidos/vendas/${id}`), situacoesVendas(), ref.get(),
+    ])
+  } catch (err) {
+    if (!pedidoSumiu(err, id)) throw err
+    await marcarExcluido(id)
+    return { id: String(id), excluido: true }
+  }
   const dados = {
     ...paraCache(p, situacoes),
     itens: (p.itens ?? []).map(it => ({
@@ -140,6 +160,7 @@ export async function detalharPedido(id) {
       formaPagamentoId: x.formaPagamento?.id ? String(x.formaPagamento.id) : null,
     })),
     obs: p.observacoes ?? '',
+    criadoPeloSite: String(p.observacoesInternas ?? '').includes(MARCA_SITE),
     detalheEm: Date.now(),
   }
 
@@ -227,4 +248,25 @@ export async function sincronizarPedidos({ completo = false, limiteDetalhes = 25
 
 export async function ultimaSincronizacaoPedidos() {
   return (await metaDoc().get()).data()?.ultimaEm ?? null
+}
+
+const brl = v => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`
+
+// Avisa autorização/rejeição de nota (uma vez por situação; o webhook do Bling usa a mesma chave)
+export async function avisarNota(nota, pedidoDoc, excetoEmail) {
+  const tipo = nota.tipo === 'nfce' ? 'NFC-e' : 'NF-e'
+  const cliente = pedidoDoc?.cliente?.apelido || pedidoDoc?.cliente?.nome || nota.contatoNome || ''
+  if (notaAutorizada(nota.situacao)) {
+    await avisarUmaVez(`nota-${nota.id}-autorizada`, {
+      titulo: `✅ ${tipo} autorizada`,
+      corpo: `${tipo} nº ${nota.numero ?? ''}${pedidoDoc?.numero ? ` do pedido nº ${pedidoDoc.numero}` : ''}${cliente ? ` – ${cliente}` : ''}`,
+      excetoEmail, tag: `nota-${nota.id}`,
+    })
+  } else if ([4, 9].includes(Number(nota.situacao))) {
+    await avisarUmaVez(`nota-${nota.id}-rejeitada-${nota.situacao}`, {
+      titulo: `⚠️ ${tipo} ${Number(nota.situacao) === 9 ? 'denegada' : 'rejeitada'}`,
+      corpo: `${tipo}${nota.numero ? ' nº ' + nota.numero : ''}${pedidoDoc?.numero ? ` do pedido nº ${pedidoDoc.numero}` : ''}${cliente ? ` – ${cliente}` : ''}. Veja o motivo no Bling.`,
+      excetoEmail, tag: `nota-${nota.id}`,
+    })
+  }
 }

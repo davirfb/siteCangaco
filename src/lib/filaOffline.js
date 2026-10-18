@@ -45,6 +45,7 @@ export async function processarFila() {
       } catch (err) {
         if (err.offline || err.manutencao) break
         gravarFila(lerFila().map(i => i.id === item.id ? { ...i, erro: err.message } : i))
+        window.dispatchEvent(new CustomEvent('cangaco:filaErro', { detail: { item, erro: err.message } }))
       }
     }
   } finally {

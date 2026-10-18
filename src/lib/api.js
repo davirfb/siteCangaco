@@ -48,6 +48,12 @@ export async function api(caminho, { method = 'GET', body } = {}) {
     throw err
   }
   if (resp.ok) avisarManutencao(false)
-  if (!resp.ok) throw new Error(dados?.erro || `Erro ${resp.status} no servidor.`)
+  if (!resp.ok) {
+    // Pedido excluído direto no Bling: as telas de pedidos recarregam e ele some
+    if (dados?.excluido) window.dispatchEvent(new Event('cangaco:pedidosMudaram'))
+    const err = new Error(dados?.erro || `Erro ${resp.status} no servidor.`)
+    err.excluido = !!dados?.excluido
+    throw err
+  }
   return dados
 }

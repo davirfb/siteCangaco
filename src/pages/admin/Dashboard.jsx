@@ -10,6 +10,7 @@ import SecaoCriarPedido from './CriarPedido.jsx'
 import SecaoPedidos from './Pedidos.jsx'
 import SecaoInicio from './Inicio.jsx'
 import StatusConexao from './StatusConexao.jsx'
+import BotaoNotificacoes from './BotaoNotificacoes.jsx'
 import VinculoBling from './VinculoBling.jsx'
 import { auth, db } from '../../lib/firebase.js'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
@@ -761,6 +762,15 @@ export default function Dashboard() {
     return unsub
   }, [navigate])
 
+  // Manifesto próprio do painel: ao "instalar" no celular, o app abre direto no painel
+  useEffect(() => {
+    const link = document.querySelector('link[rel="manifest"]')
+    if (!link) return
+    const anterior = link.getAttribute('href')
+    link.setAttribute('href', '/admin.webmanifest')
+    return () => link.setAttribute('href', anterior)
+  }, [])
+
   // Volta da autorização do Bling (/api/bling/callback → ?bling=conectado|erro)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -878,6 +888,7 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-2">
           <StatusConexao showToast={showToast} irPara={setActiveSection} />
+          <BotaoNotificacoes showToast={showToast} />
           <span className="text-xs text-white/60 hidden lg:block truncate max-w-50">{userEmail}</span>
           <Link to="/" target="_blank" rel="noopener noreferrer"
                 className="hidden sm:flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg text-xs transition-colors text-white">
@@ -1057,7 +1068,7 @@ export default function Dashboard() {
           {activeSection === 'inicio' && <SecaoInicio showToast={showToast} irPara={setActiveSection} />}
 
           {/* ── Pedidos (lista) ── */}
-          {activeSection === 'listaPedidos' && <SecaoPedidos showToast={showToast} irPara={setActiveSection} />}
+          {activeSection === 'listaPedidos' && <SecaoPedidos showToast={showToast} irPara={setActiveSection} produtos={produtos} />}
 
           {/* ── Clientes ── */}
           {activeSection === 'clientes' && <SecaoClientes showToast={showToast} />}

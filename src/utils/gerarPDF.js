@@ -609,3 +609,117 @@ export function gerarListaClientesPDF({ secoes, subtitulo }) {
 
   doc.save(`clientes-cangaco-${new Date().toISOString().slice(0, 10)}.pdf`)
 }
+
+// Resumo de produção dos pedidos em aberto: quanto fazer de cada produto + lista de pedidos
+// produtos: [{ nome, quantidade, valor, qtdFardo }]
+// pedidos:  [{ numero, entrega, cliente, destaques: [], total }]
+export function gerarResumoProducaoPDF({ produtos, pedidos, descricao = 'Pedidos em aberto' }) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const hoje = new Date().toLocaleDateString('pt-BR')
+  const dataBR = iso => iso ? new Date(`${String(iso).slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR') : '—'
+  let y = 0
+
+  const topo = (continua = false) => {
+    doc.setFillColor(...COR_PRIMARY)
+    doc.rect(0, 0, W, 24, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(17)
+    doc.text(continua ? 'RESUMO DE PRODUÇÃO (cont.)' : 'RESUMO DE PRODUÇÃO', MARGIN, 15)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9.5)
+    doc.text(`${descricao} · ${pedidos.length} pedido${pedidos.length !== 1 ? 's' : ''} · ${hoje}`, W - MARGIN, 15, { align: 'right' })
+    rodape(doc)
+    y = 32
+  }
+  const garantir = h => { if (y + h > H - 16) { doc.addPage(); topo(true) } }
+
+  const titulo = texto => {
+    garantir(14)
+    doc.setTextColor(...COR_PRIMARY)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(11)
+    doc.text(texto, MARGIN, y + 4)
+    y += 7
+  }
+
+  const cabecalho = colunas => {
+    doc.setFillColor(...COR_DARK)
+    doc.rect(MARGIN, y, W - MARGIN * 2, 8, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8.5)
+    colunas.forEach(([t, x, al]) => doc.text(t, x, y + 5.5, al ? { align: al } : undefined))
+    y += 8
+  }
+
+  topo()
+
+  // ── Produtos a produzir ──
+  titulo('O QUE PRODUZIR')
+  const colsProd = [['PRODUTO', MARGIN + 3], ['QUANTIDADE', 128, 'right'], ['FARDOS', 160, 'right'], ['VALOR', W - MARGIN - 3, 'right']]
+  cabecalho(colsProd)
+  produtos.forEach((p, i) => {
+    garantir(9)
+    if (y === 32) cabecalho(colsProd)
+    if (i % 2 === 1) { doc.setFillColor(250, 247, 240); doc.rect(MARGIN, y, W - MARGIN * 2, 9, 'F') }
+    doc.setTextColor(...COR_DARK)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.text(doc.splitTextToSize(p.nome || '—', 90)[0], MARGIN + 3, y + 6)
+    doc.setFontSize(11)
+    doc.text(String(p.quantidade), 128, y + 6, { align: 'right' })
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    if (p.qtdFardo > 1) {
+      const f = Math.floor(p.quantidade / p.qtdFardo)
+      const resto = p.quantidade % p.qtdFardo
+      doc.text(`${f} × ${p.qtdFardo}${resto ? ` + ${resto} un` : ''}`, 160, y + 6, { align: 'right' })
+    } else doc.text('—', 160, y + 6, { align: 'right' })
+    doc.setTextColor(...COR_LIGHT)
+    doc.text(brlPDF(p.valor), W - MARGIN - 3, y + 6, { align: 'right' })
+    y += 9
+  })
+  const totalUn = produtos.reduce((a, p) => a + p.quantidade, 0)
+  const totalValor = pedidos.reduce((a, p) => a + Number(p.total || 0), 0)
+  garantir(12)
+  doc.setFillColor(...COR_PRIMARY)
+  doc.roundedRect(MARGIN, y + 1, W - MARGIN * 2, 10, 2, 2, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.text('TOTAL', MARGIN + 3, y + 7.5)
+  doc.text(`${totalUn} un`, 128, y + 7.5, { align: 'right' })
+  doc.text(brlPDF(totalValor), W - MARGIN - 3, y + 7.5, { align: 'right' })
+  y += 18
+
+  // ── Pedidos (com destaques dos clientes) ──
+  titulo('PEDIDOS')
+  const colsPed = [['Nº', MARGIN + 3], ['ENTREGA', MARGIN + 18], ['CLIENTE / DESTAQUES', MARGIN + 42], ['VALOR', W - MARGIN - 3, 'right']]
+  cabecalho(colsPed)
+  pedidos.forEach((p, i) => {
+    const dest = p.destaques?.length ? doc.splitTextToSize(`» ${p.destaques.join(' · ')}`, 118).slice(0, 2) : []
+    const h = 8 + dest.length * 4
+    garantir(h)
+    if (y === 32) cabecalho(colsPed)
+    if (i % 2 === 1) { doc.setFillColor(250, 247, 240); doc.rect(MARGIN, y, W - MARGIN * 2, h, 'F') }
+    doc.setTextColor(...COR_DARK)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9.5)
+    doc.text(String(p.numero ?? '—'), MARGIN + 3, y + 5.5)
+    doc.setFont('helvetica', 'normal')
+    doc.text(dataBR(p.entrega), MARGIN + 18, y + 5.5)
+    doc.setFont('helvetica', 'bold')
+    doc.text(doc.splitTextToSize(p.cliente || '—', 118)[0], MARGIN + 42, y + 5.5)
+    doc.text(brlPDF(p.total), W - MARGIN - 3, y + 5.5, { align: 'right' })
+    if (dest.length) {
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8)
+      doc.setTextColor(180, 120, 0)
+      doc.text(dest, MARGIN + 42, y + 9.5)
+    }
+    y += h
+  })
+
+  doc.save(`resumo-producao-${new Date().toISOString().slice(0, 10)}.pdf`)
+}

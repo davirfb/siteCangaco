@@ -5,7 +5,7 @@ import { useRascunho } from '../../hooks/useRascunho.js'
 import {
   formatarDocumento, nomeExibicao, filtrarClientes, ordenarClientes, destaquesDoCliente,
 } from '../../lib/clientes.js'
-import { gerarPedidoPDF, gerarPedidosPDF } from '../../utils/gerarPDF.js'
+import { gerarPedidoPDF, gerarPedidosPDF, gerarResumoProducaoPDF } from '../../utils/gerarPDF.js'
 import { abrirNoCriarPedido } from './CriarPedido.jsx'
 
 const brl = v => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`
@@ -301,7 +301,15 @@ function ModalPedido({ pedido: inicial, info, formas, onClose, onAtualizar, onEd
 
   useEffect(() => {
     api('/pedidos', { method: 'POST', body: { acao: 'detalhes', ids: [inicial.id] } })
-      .then(r => { const p = r.pedidos[0]; if (p) { setPedido(p); onAtualizar(p) } })
+      .then(r => {
+        const p = r.pedidos[0]
+        if (p?.excluido) {
+          showToast('Este pedido não existe mais no Bling (foi excluído lá). Ele foi removido da lista.', 'error')
+          window.dispatchEvent(new Event('cangaco:pedidosMudaram'))
+          return
+        }
+        if (p) { setPedido(p); onAtualizar(p) }
+      })
       .catch(err => showToast(err.message, 'error'))
       .finally(() => setCarregando(false))
   }, [inicial.id])
@@ -493,7 +501,7 @@ function FiltroClientes({ clientes, grupos, valor, onChange }) {
 }
 
 /* ── Seção Pedidos ── */
-export default function SecaoPedidos({ showToast, irPara }) {
+export default function SecaoPedidos({ showToast, irPara, produtos = [] }) {
   const [pedidos,    setPedidos]    = useState([])
   const [orcamentos, setOrcamentos] = useState([])
   const [clientes,   setClientes]   = useState([])
@@ -523,6 +531,13 @@ export default function SecaoPedidos({ showToast, irPara }) {
     setUltimaSync(r.ultimaSincronizacao)
     return r
   }
+
+  // Algum pedido foi excluído no Bling: recarrega (ele vem marcado e sai da lista)
+  useEffect(() => {
+    const recarregar = () => { carregar().catch(() => {}) }
+    window.addEventListener('cangaco:pedidosMudaram', recarregar)
+    return () => window.removeEventListener('cangaco:pedidosMudaram', recarregar)
+  }, [])
 
   async function sincronizar({ completo = false, silencioso = false } = {}) {
     setSincronizando(true)
@@ -592,11 +607,49 @@ export default function SecaoPedidos({ showToast, irPara }) {
 
   function atualizarPedido(p) { setPedidos(prev => prev.map(x => x.id === p.id ? { ...x, ...p } : x)) }
 
+  // Resumo de produção: soma a quantidade de cada produto em todos os pedidos em aberto
+  async function pdfProducao() {
+    if (!abertos.length) return
+    setGerandoPDF('producao')
+    try {
+      const { pedidos: todos } = await api('/pedidos', { method: 'POST', body: { acao: 'detalhes', ids: abertos.map(p => p.id) } })
+      if (todos.some(p => p.excluido)) window.dispatchEvent(new Event('cangaco:pedidosMudaram'))
+      const completos = todos.filter(p => !p.excluido)
+      completos.forEach(atualizarPedido)
+
+      const soma = {}
+      completos.forEach(p => (p.itens ?? []).forEach(it => {
+        const chave = it.blingProdutoId || String(it.nome ?? '').trim().toLowerCase()
+        const doCatalogo = produtos.find(x => (it.blingProdutoId && x.blingProdutoId === it.blingProdutoId) || (it.produtoId && x.id === it.produtoId))
+        const atual = soma[chave] ?? { nome: doCatalogo?.nome || it.nome, quantidade: 0, valor: 0, qtdFardo: doCatalogo?.qtdFardo ?? 0 }
+        atual.quantidade += Number(it.quantidade || 0)
+        atual.valor += Number(it.quantidade || 0) * Number(it.precoUnitario || 0)
+        soma[chave] = atual
+      }))
+
+      gerarResumoProducaoPDF({
+        produtos: Object.values(soma).sort((a, b) => String(a.nome).localeCompare(String(b.nome))),
+        pedidos: completos
+          .sort((a, b) => String(a.dataPrevista ?? a.data ?? '').localeCompare(String(b.dataPrevista ?? b.data ?? '')) || (a.numero ?? 0) - (b.numero ?? 0))
+          .map(p => {
+            const i = infoCliente(p)
+            return { numero: p.numero, entrega: p.dataPrevista || p.data, cliente: i.nome, destaques: i.destaques, total: p.total }
+          }),
+        descricao: filtroCli.length ? 'Pedidos em aberto (clientes filtrados)' : 'Pedidos em aberto',
+      })
+    } catch (err) { showToast(err.message, 'error') }
+    finally { setGerandoPDF('') }
+  }
+
   async function pdfPedidos(lista, descricao, arquivo) {
     if (!lista.length) { showToast('Nenhum pedido para gerar o PDF.', 'error'); return }
     setGerandoPDF(arquivo)
     try {
-      const { pedidos: completos } = await api('/pedidos', { method: 'POST', body: { acao: 'detalhes', ids: lista.map(p => p.id) } })
+      const { pedidos: todos } = await api('/pedidos', { method: 'POST', body: { acao: 'detalhes', ids: lista.map(p => p.id) } })
+      // Pedidos que não existem mais no Bling saem da lista e do PDF
+      if (todos.some(p => p.excluido)) window.dispatchEvent(new Event('cangaco:pedidosMudaram'))
+      const completos = todos.filter(p => !p.excluido)
+      lista = lista.filter(p => completos.some(c => c.id === p.id))
       completos.forEach(atualizarPedido)
       const porId = Object.fromEntries(completos.map(p => [p.id, p]))
       gerarPedidosPDF(lista.map(p => {
@@ -713,8 +766,8 @@ export default function SecaoPedidos({ showToast, irPara }) {
             </button>
           )}
           {aba === 'abertos' && (
-            <button onClick={() => pdfPedidos(abertos, 'Pedidos em aberto', 'pedidos-em-aberto')} disabled={!!gerandoPDF || !abertos.length} className={btnSec}>
-              <i className={`fas ${spin('pedidos-em-aberto')}`}></i> PDF dos em aberto
+            <button onClick={pdfProducao} disabled={!!gerandoPDF || !abertos.length} className={btnSec}>
+              <i className={`fas ${spin('producao')}`}></i> Resumo de produção (PDF)
             </button>
           )}
           {aba === 'historico' && (

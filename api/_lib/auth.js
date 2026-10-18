@@ -54,7 +54,7 @@ export function rota(metodos, handler) {
       }
       const status = err.status || 500
       if (status >= 500) console.error(err)
-      res.status(status).json({ erro: err.message || 'Erro interno.' })
+      res.status(status).json({ erro: err.message || 'Erro interno.', ...(err.excluido && { excluido: true }) })
     }
   }
 }

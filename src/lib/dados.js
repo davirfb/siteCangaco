@@ -54,7 +54,8 @@ export async function obterClientes() {
 
 export async function obterPedidos() {
   const c = await atualizar('pedidos', '/pedidos?recurso=lista', 'pedidos', r => ({ orcamentos: r.orcamentos ?? [], ultimaSincronizacao: r.ultimaSincronizacao }))
-  return { pedidos: Object.values(c.itens), orcamentos: c.orcamentos, ultimaSincronizacao: c.ultimaSincronizacao, offline: c.offline }
+  // Pedidos excluídos no Bling ficam marcados no servidor e não aparecem
+  return { pedidos: Object.values(c.itens).filter(p => !p.excluido), orcamentos: c.orcamentos, ultimaSincronizacao: c.ultimaSincronizacao, offline: c.offline }
 }
 
 export async function obterFormasPagamento() {
